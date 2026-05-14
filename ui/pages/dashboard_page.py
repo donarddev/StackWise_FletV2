@@ -1,24 +1,28 @@
-"""Dashboard page — analytics overview + recent activity."""
+# ACTIVE DASHBOARD PAGE
+"""Dashboard page — analytics overview + recent activity.
+
+ACTIVE AUTHENTICATED PAGE - Rendered by DashboardController via wrap_with_layout
+Implements premium dark SaaS dashboard matching Laravel version structure but adapted for Flet.
+
+Layout:
+1. Workspace Welcome Hero Card (top)
+2. Analytics Cards Grid (7 cards)
+3. Recent Recommendations Table (bottom)
+"""
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable, Mapping
 
 import flet as ft
 
 from app.models.recommendation import Recommendation
 from app.models.user import User
 from app.services.analytics_service import DashboardSnapshot
-from ui.components.empty_state import empty_state
-from ui.components.glass_card import glass_card
-from ui.components.page_header import page_header
-from ui.components.primary_button import primary_button, secondary_button
-from ui.components.section_header import section_header
-from ui.components.stat_card import stat_card
-from ui.themes.app_theme import Colors, Spacing, Typography
-from ui.widgets.recommendation_card import recommendation_result_card
-from ui.widgets.top_list import top_list
-from ui.widgets.trend_chart import trend_chart
+from ui.components.dashboard.analytics_card import dashboard_analytics_card
+from ui.components.dashboard.hero_card import dashboard_hero_card
+from ui.components.dashboard.recent_recommendations_table import dashboard_recent_recommendations_table
+from ui.themes.app_theme import Spacing
 
 
 def build_dashboard_page(
@@ -31,163 +35,167 @@ def build_dashboard_page(
     on_open_chatbot: Callable[[ft.ControlEvent], None],
     on_view_recommendation: Callable[[Recommendation], None],
     on_regenerate: Callable[[Recommendation], None],
+    theme: Mapping[str, Any],
 ) -> ft.Control:
-    header = page_header(
-        eyebrow="DASHBOARD",
-        title=f"Welcome back, {user.full_name.split()[0]}.",
-        subtitle="A snapshot of your recommendation activity, top stacks, and AI insights.",
-        trailing=ft.Row(
-            spacing=Spacing.sm,
-            controls=[
-                secondary_button(
-                    "Ask AI",
-                    on_click=on_open_chatbot,
-                    icon=ft.icons.CHAT_BUBBLE_OUTLINE,
-                ),
-                primary_button(
-                    "New recommendation",
-                    on_click=on_new_recommendation,
-                    icon=ft.icons.AUTO_AWESOME,
-                ),
-            ],
-        ),
+    """Build the complete dashboard page with hero, analytics, and recent recommendations."""
+
+    # 1. WORKSPACE WELCOME HERO CARD
+    hero = dashboard_hero_card(
+        user_name=user.full_name,
+        on_new_recommendation=on_new_recommendation,
+        on_view_history=on_open_history,
+        theme=theme,
     )
 
-    stats = ft.ResponsiveRow(
-        spacing=Spacing.md, run_spacing=Spacing.md,
+    # 2. ANALYTICS CARDS GRID (7 cards)
+    # Calculate confidence percentage with fallback
+    avg_confidence_pct = f"{snapshot.average_confidence:.0f}%" if snapshot.average_confidence else "—"
+
+    # Get top language and framework with fallbacks
+    top_language = snapshot.top_languages[0][0] if snapshot.top_languages else "—"
+    top_language_desc = (
+        f"Most frequently suggested language"
+        if snapshot.top_languages
+        else "Generate recommendations to populate"
+    )
+
+    top_framework = snapshot.top_frameworks[0][0] if snapshot.top_frameworks else "—"
+    top_framework_desc = (
+        f"Most frequently suggested framework"
+        if snapshot.top_frameworks
+        else "Generate recommendations to populate"
+    )
+
+    top_sdlc = snapshot.top_sdlc[0][0] if snapshot.top_sdlc else "—"
+    top_sdlc_desc = (
+        f"Most frequently suggested process model"
+        if snapshot.top_sdlc
+        else "Generate recommendations to populate"
+    )
+
+    # Format feedback and rating values
+    total_feedback = snapshot.total_feedback if snapshot.total_feedback > 0 else "0"
+    feedback_desc = (
+        f"Feedback submissions received"
+        if snapshot.total_feedback > 0
+        else "No feedback yet"
+    )
+
+    avg_rating_display = f"{snapshot.average_rating:.1f}/5" if snapshot.average_rating > 0 else "—"
+    rating_desc = (
+        f"Average user satisfaction rating"
+        if snapshot.average_rating > 0
+        else "No ratings yet"
+    )
+
+    analytics_grid = ft.ResponsiveRow(
+        spacing=20,
+        run_spacing=20,
         controls=[
-            ft.Container(col={"xs": 12, "md": 4}, content=stat_card(
-                title="Total recommendations",
-                value=str(snapshot.total_recommendations),
-                subtitle="All projects analyzed by StackWise",
-                icon=ft.icons.AUTO_AWESOME_OUTLINED,
-                accent=Colors.primary,
-            )),
-            ft.Container(col={"xs": 12, "md": 4}, content=stat_card(
-                title="Average confidence",
-                value=f"{snapshot.average_confidence:.0f}/100"
-                       if snapshot.average_confidence else "—",
-                subtitle="Engine certainty across your decisions",
-                icon=ft.icons.INSIGHTS_OUTLINED,
-                accent=Colors.accent_cyan,
-            )),
-            ft.Container(col={"xs": 12, "md": 4}, content=stat_card(
-                title="Top language",
-                value=snapshot.top_languages[0][0] if snapshot.top_languages else "—",
-                subtitle=(
-                    f"Used in {snapshot.top_languages[0][1]} recommendations"
-                    if snapshot.top_languages else "Generate one to see your favorites"
+            # Card 1: Total Recommendations
+            ft.Container(
+                col={"xs": 12, "sm": 6, "md": 4, "lg": 3},
+                content=dashboard_analytics_card(
+                    title="Total Recommendations",
+                    value=snapshot.total_recommendations,
+                    description="Saved recommendation records",
+                    icon="auto_awesome_outlined",
+                    accent_color=theme["accent"],
+                    theme=theme,
                 ),
-                icon=ft.icons.CODE_ROUNDED,
-                accent=Colors.accent_pink,
-            )),
-        ],
-    )
-
-    insights = glass_card(
-        ft.Column(
-            spacing=Spacing.md,
-            controls=[
-                ft.Row(
-                    spacing=Spacing.sm,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    controls=[
-                        ft.Container(
-                            width=28, height=28, border_radius=8,
-                            bgcolor=ft.colors.with_opacity(0.14, Colors.primary),
-                            alignment=ft.alignment.center,
-                            content=ft.Icon(ft.icons.TIPS_AND_UPDATES_OUTLINED,
-                                            size=16, color=Colors.primary_glow),
-                        ),
-                        ft.Text("AI Insights", style=Typography.subheading(size=15)),
-                    ],
-                ),
-                *[
-                    ft.Row(
-                        controls=[
-                            ft.Container(
-                                width=6, height=6, border_radius=999,
-                                bgcolor=Colors.primary_glow,
-                                margin=ft.margin.only(top=8),
-                            ),
-                            ft.Text(insight, style=Typography.body(size=13.5), expand=True),
-                        ],
-                        spacing=Spacing.sm,
-                        vertical_alignment=ft.CrossAxisAlignment.START,
-                    )
-                    for insight in snapshot.insights
-                ],
-            ],
-        )
-    )
-
-    columns = ft.ResponsiveRow(
-        spacing=Spacing.md, run_spacing=Spacing.md,
-        controls=[
-            ft.Container(col={"xs": 12, "lg": 8}, content=trend_chart(snapshot.weekly_trend)),
-            ft.Container(col={"xs": 12, "lg": 4}, content=insights),
-        ],
-    )
-
-    rankings = ft.ResponsiveRow(
-        spacing=Spacing.md, run_spacing=Spacing.md,
-        controls=[
-            ft.Container(col={"xs": 12, "md": 4}, content=top_list(
-                title="Top languages", items=snapshot.top_languages,
-                icon=ft.icons.CODE_ROUNDED, accent=Colors.primary,
-                empty_text="Run a recommendation to populate this list.",
-            )),
-            ft.Container(col={"xs": 12, "md": 4}, content=top_list(
-                title="Top frameworks", items=snapshot.top_frameworks,
-                icon=ft.icons.DASHBOARD_CUSTOMIZE_OUTLINED, accent=Colors.accent_cyan,
-                empty_text="Run a recommendation to populate this list.",
-            )),
-            ft.Container(col={"xs": 12, "md": 4}, content=top_list(
-                title="Top SDLC models", items=snapshot.top_sdlc,
-                icon=ft.icons.ALT_ROUTE_OUTLINED, accent=Colors.accent_pink,
-                empty_text="Run a recommendation to populate this list.",
-            )),
-        ],
-    )
-
-    if recent:
-        recent_section = ft.Column(
-            spacing=Spacing.md,
-            controls=[
-                section_header(
-                    "Recent recommendations",
-                    subtitle="Your last few project analyses",
-                    trailing=ft.TextButton(
-                        "View all", icon=ft.icons.ARROW_FORWARD,
-                        on_click=on_open_history,
-                    ),
-                ),
-                *[
-                    recommendation_result_card(
-                        r,
-                        on_view=lambda _e, rec=r: on_view_recommendation(rec),
-                        on_regenerate=lambda _e, rec=r: on_regenerate(rec),
-                    )
-                    for r in recent
-                ],
-            ],
-        )
-    else:
-        recent_section = empty_state(
-            icon=ft.icons.AUTO_AWESOME_OUTLINED,
-            title="Generate your first recommendation",
-            description=(
-                "Tell StackWise about your project and get an explainable language, "
-                "framework, and SDLC pick — usually in under a second."
             ),
-            action=primary_button(
-                "Start a recommendation",
-                on_click=on_new_recommendation,
-                icon=ft.icons.AUTO_AWESOME,
+            # Card 2: Average Confidence
+            ft.Container(
+                col={"xs": 12, "sm": 6, "md": 4, "lg": 3},
+                content=dashboard_analytics_card(
+                    title="Average Confidence",
+                    value=avg_confidence_pct,
+                    description="Average score from all recommendations",
+                    icon="insights_outlined",
+                    accent_color=theme["accent_2"],
+                    theme=theme,
+                ),
             ),
-        )
+            # Card 3: Top Language
+            ft.Container(
+                col={"xs": 12, "sm": 6, "md": 4, "lg": 3},
+                content=dashboard_analytics_card(
+                    title="Top Language",
+                    value=top_language,
+                    description=top_language_desc,
+                    icon="code",
+                    accent_color=theme["accent_pink"],
+                    theme=theme,
+                ),
+            ),
+            # Card 4: Top Framework
+            ft.Container(
+                col={"xs": 12, "sm": 6, "md": 4, "lg": 3},
+                content=dashboard_analytics_card(
+                    title="Top Framework",
+                    value=top_framework,
+                    description=top_framework_desc,
+                    icon="dashboard_customize_outlined",
+                    accent_color=theme["accent"],
+                    theme=theme,
+                ),
+            ),
+            # Card 5: Top SDLC Model
+            ft.Container(
+                col={"xs": 12, "sm": 6, "md": 4, "lg": 3},
+                content=dashboard_analytics_card(
+                    title="Top SDLC Model",
+                    value=top_sdlc,
+                    description=top_sdlc_desc,
+                    icon="route_outlined",
+                    accent_color=theme["accent_2"],
+                    theme=theme,
+                ),
+            ),
+            # Card 6: Total Feedback
+            ft.Container(
+                col={"xs": 12, "sm": 6, "md": 4, "lg": 3},
+                content=dashboard_analytics_card(
+                    title="Total Feedback",
+                    value=total_feedback,
+                    description=feedback_desc,
+                    icon="feedback_outlined",
+                    accent_color=theme["accent_pink"],
+                    theme=theme,
+                ),
+            ),
+            # Card 7: Average Rating
+            ft.Container(
+                col={"xs": 12, "sm": 6, "md": 4, "lg": 3},
+                content=dashboard_analytics_card(
+                    title="Average Rating",
+                    value=avg_rating_display,
+                    description=rating_desc,
+                    icon="star_outline",
+                    accent_color=theme["success"],
+                    theme=theme,
+                ),
+            ),
+        ],
+    )
 
+    # 3. RECENT RECOMMENDATIONS TABLE
+    recent_table = dashboard_recent_recommendations_table(
+        recommendations=recent,
+        on_view_details=on_view_recommendation,
+        on_generate=on_new_recommendation,
+        theme=theme,
+        on_open_history=on_open_history,
+    )
+    recent_block = ft.Container(
+        margin=ft.margin.only(top=Spacing.md),
+        content=recent_table,
+    )
+
+    # Open layout: no outer panel/card — cards sit on the workspace background;
+    # scrolling is handled by AppLayout content area only.
     return ft.Column(
-        spacing=Spacing.xl,
-        controls=[header, stats, columns, rankings, recent_section],
+        spacing=24,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+        controls=[hero, analytics_grid, recent_block],
     )

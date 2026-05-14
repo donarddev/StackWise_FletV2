@@ -129,3 +129,69 @@ def run_migrations(db: "DatabaseService") -> None:
     if current < 1:
         db.execute("INSERT INTO schema_version (version) VALUES (%s)", (1,))
         log.info("Applied initial schema (v1).")
+    
+    # Migration v2: add columns to support Google OAuth users
+    if current < 2:
+        schema = db._config.database
+
+        # google_id
+        row = db.fetch_one(
+            "SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s",
+            (schema, "users", "google_id"),
+        )
+        if not row or int(row.get("c", 0)) == 0:
+            db.execute("ALTER TABLE users ADD COLUMN google_id VARCHAR(255) NULL")
+
+        # provider
+        row = db.fetch_one(
+            "SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s",
+            (schema, "users", "provider"),
+        )
+        if not row or int(row.get("c", 0)) == 0:
+            db.execute("ALTER TABLE users ADD COLUMN provider VARCHAR(50) NOT NULL DEFAULT 'local'")
+
+        # avatar_url
+        row = db.fetch_one(
+            "SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s",
+            (schema, "users", "avatar_url"),
+        )
+        if not row or int(row.get("c", 0)) == 0:
+            db.execute("ALTER TABLE users ADD COLUMN avatar_url TEXT NULL")
+
+        # make password_hash nullable if currently NOT NULL
+        row = db.fetch_one(
+            "SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s",
+            (schema, "users", "password_hash"),
+        )
+        if row and row.get("IS_NULLABLE") == "NO":
+            db.execute("ALTER TABLE users MODIFY COLUMN password_hash VARCHAR(255) NULL")
+
+        db.execute("INSERT INTO schema_version (version) VALUES (%s)", (2,))
+        log.info("Applied migration v2 (Google OAuth columns).")
+
+    # Migration v3: store richer recommendation request payload as JSON
+    if current < 3:
+        schema = db._config.database
+        row = db.fetch_one(
+            "SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s",
+            (schema, "recommendations", "project_profile_json"),
+        )
+        if not row or int(row.get("c", 0)) == 0:
+            db.execute("ALTER TABLE recommendations ADD COLUMN project_profile_json LONGTEXT NULL")
+        db.execute("INSERT INTO schema_version (version) VALUES (%s)", (3,))
+        log.info("Applied migration v3 (recommendation project_profile_json).")
+
+    # Migration v4: UI theme preference per user (dark / light)
+    if current < 4:
+        schema = db._config.database
+        row = db.fetch_one(
+            "SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s",
+            (schema, "users", "theme_mode"),
+        )
+        if not row or int(row.get("c", 0)) == 0:
+            db.execute(
+                "ALTER TABLE users ADD COLUMN theme_mode VARCHAR(16) NULL "
+                "COMMENT 'UI preference: dark or light'"
+            )
+        db.execute("INSERT INTO schema_version (version) VALUES (%s)", (4,))
+        log.info("Applied migration v4 (users.theme_mode).")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 import flet as ft
 
@@ -23,7 +23,35 @@ def input_field(
     on_submit=None,
     autofocus: bool = False,
     text_size: int = 14,
+    theme: Optional[Mapping[str, Any]] = None,
 ) -> ft.TextField:
+    if theme is not None:
+        return ft.TextField(
+            label=label,
+            value=value,
+            hint_text=hint,
+            password=password,
+            can_reveal_password=password,
+            prefix_icon=icon,
+            multiline=multiline,
+            min_lines=min_lines,
+            max_lines=max_lines if multiline else 1,
+            autofocus=autofocus,
+            text_size=text_size,
+            on_change=on_change,
+            on_submit=on_submit,
+            bgcolor=theme["surface"],
+            border_color=theme["border_strong"],
+            focused_border_color=theme["accent"],
+            focused_bgcolor=theme["surface_3"],
+            cursor_color=theme["accent_soft"],
+            color=theme["text"],
+            label_style=ft.TextStyle(color=theme["text_secondary"], size=13),
+            hint_style=ft.TextStyle(color=theme["text_muted"], size=13),
+            text_style=ft.TextStyle(color=theme["text"], size=text_size),
+            border_radius=Radii.md,
+            content_padding=ft.padding.symmetric(horizontal=14, vertical=14),
+        )
     return ft.TextField(
         label=label,
         value=value,

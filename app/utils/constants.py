@@ -19,6 +19,7 @@ class Routes:
     CHATBOT = "/chatbot"
     LEARNING = "/learning"
     SETTINGS = "/settings"
+    OAUTH_CALLBACK = "/oauth_callback"
 
 
 # ---------- Recommendation form options ----------

@@ -23,6 +23,7 @@ from app.controllers.settings_controller import SettingsController
 from app.core.container import Container
 from app.utils.constants import Routes
 from app.utils.logger import get_logger
+from urllib.parse import urlparse, parse_qs
 
 log = get_logger(__name__)
 
@@ -84,6 +85,17 @@ class Router:
 
     def _on_route_change(self, e: ft.RouteChangeEvent) -> None:
         target = e.route or Routes.HOME
+
+        # Handle OAuth callback which may include query params, e.g. /oauth_callback?code=...
+        parsed = urlparse(target)
+        if parsed.path == Routes.OAUTH_CALLBACK:
+            params = {k: v[0] for k, v in parse_qs(parsed.query).items()}
+            try:
+                self.auth_controller.handle_oauth_callback(params)
+            except Exception:
+                log.exception("Error handling OAuth callback")
+            return
+
         resolution = self._routes.get(target)
 
         if resolution is None:
@@ -100,6 +112,30 @@ class Router:
             self.page.go(Routes.DASHBOARD)
             return
 
+        view = ft.View(
+            route=target,
+            padding=0,
+            bgcolor=None,
+            controls=[resolution.builder()],
+        )
+        self.page.views.clear()
+        self.page.views.append(view)
+        self.page.update()
+
+    def reload_current_view(self) -> None:
+        """Rebuild the active view without changing the route (e.g. theme toggle)."""
+        target = self.page.route or self._initial_route()
+        parsed = urlparse(target)
+        if parsed.path == Routes.OAUTH_CALLBACK:
+            return
+        resolution = self._routes.get(target)
+        if resolution is None:
+            return
+        if resolution.requires_auth and not self.container.session.is_authenticated:
+            return
+        if not resolution.requires_auth and self.container.session.is_authenticated:
+            self.page.go(Routes.DASHBOARD)
+            return
         view = ft.View(
             route=target,
             padding=0,

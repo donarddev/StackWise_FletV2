@@ -19,6 +19,8 @@ class DashboardSnapshot:
     top_sdlc: list[tuple[str, int]] = field(default_factory=list)
     weekly_trend: list[tuple[str, int]] = field(default_factory=list)
     insights: list[str] = field(default_factory=list)
+    total_feedback: int = 0
+    average_rating: float = 0.0
 
 
 class AnalyticsService:

@@ -204,48 +204,78 @@ def build_public_landing_page(
 def _header(*, on_home, on_about, on_login, on_register) -> ft.Control:
     return ft.Container(
         padding=ft.padding.symmetric(horizontal=28, vertical=14),
-        border=ft.border.only(bottom=ft.BorderSide(1, ft.colors.with_opacity(0.7, Colors.border))),
-        bgcolor=ft.colors.with_opacity(0.58, Colors.surface),
-        content=ft.Row(
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        bgcolor=ft.colors.TRANSPARENT,
+        content=ft.Stack(
+            height=56,
             controls=[
-                ft.Row(
-                    spacing=Spacing.md,
-                    controls=[
-                        brand_icon(size=34, radius=10),
-                        ft.Column(
-                            spacing=1,
+                ft.Container(
+                    alignment=ft.alignment.center,
+                    content=ft.Container(
+                        padding=ft.padding.symmetric(horizontal=8, vertical=6),
+                        border_radius=Radii.pill,
+                        bgcolor=ft.colors.with_opacity(0.52, Colors.surface),
+                        border=ft.border.all(1, ft.colors.with_opacity(0.65, Colors.border)),
+                        shadow=ft.BoxShadow(
+                            spread_radius=0,
+                            blur_radius=14,
+                            color=ft.colors.with_opacity(0.16, Colors.primary),
+                            offset=ft.Offset(0, 2),
+                        ),
+                        content=ft.Row(
+                            spacing=4,
                             tight=True,
                             controls=[
-                                ft.Text(BRAND_NAME, style=Typography.subheading(size=15)),
-                                ft.Text(
-                                    "Tech stack decision support system",
-                                    style=Typography.caption(),
+                                _center_nav_button("Home", on_home, active=True),
+                                _center_nav_button("About", on_about),
+                            ],
+                        ),
+                    ),
+                ),
+                ft.Row(
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        ft.Row(
+                            spacing=Spacing.md,
+                            controls=[
+                                brand_icon(size=34, radius=10),
+                                ft.Column(
+                                    spacing=1,
+                                    tight=True,
+                                    controls=[
+                                        ft.Text(BRAND_NAME, style=Typography.subheading(size=15)),
+                                        ft.Text(
+                                            "Tech stack decision support system",
+                                            style=Typography.caption(),
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        ),
+                        ft.Row(
+                            spacing=8,
+                            controls=[
+                                _header_action_button("Login", on_login),
+                                ft.Container(
+                                    border_radius=Radii.pill,
+                                    gradient=ft.LinearGradient(
+                                        begin=ft.alignment.top_left,
+                                        end=ft.alignment.bottom_right,
+                                        colors=["#2dd4bf", Colors.primary],
+                                    ),
+                                    content=ft.TextButton(
+                                        "Register",
+                                        on_click=on_register,
+                                        style=ft.ButtonStyle(
+                                            color=Colors.text_primary,
+                                            shape=ft.RoundedRectangleBorder(radius=Radii.pill),
+                                            padding=ft.padding.symmetric(horizontal=18, vertical=11),
+                                        ),
+                                    ),
                                 ),
                             ],
                         ),
                     ],
-                ),
-                ft.Container(expand=True),
-                _nav_button("Home", on_home, active=True),
-                _nav_button("About", on_about),
-                _nav_button("Login", on_login),
-                ft.Container(width=8),
-                ft.Container(
-                    border_radius=Radii.pill,
-                    gradient=ft.LinearGradient(
-                        begin=ft.alignment.top_left,
-                        end=ft.alignment.bottom_right,
-                        colors=["#2dd4bf", Colors.primary],
-                    ),
-                    content=ft.TextButton(
-                        "Register",
-                        on_click=on_register,
-                        style=ft.ButtonStyle(
-                            color=Colors.text_primary,
-                            shape=ft.RoundedRectangleBorder(radius=Radii.pill),
-                        ),
-                    ),
                 ),
             ],
         ),
@@ -937,15 +967,38 @@ def _cta_section(*, on_create_account, on_login) -> ft.Control:
     )
 
 
-def _nav_button(label: str, on_click, *, active: bool = False) -> ft.Control:
+def _center_nav_button(label: str, on_click, *, active: bool = False) -> ft.Control:
     return ft.TextButton(
         label,
         on_click=on_click,
         style=ft.ButtonStyle(
-            color=Colors.text_primary if active else Colors.text_secondary,
-            bgcolor=ft.colors.with_opacity(0.30, Colors.surface) if active else None,
+            color=Colors.text_primary if active else ft.colors.with_opacity(0.92, Colors.text_secondary),
+            bgcolor=(
+                ft.colors.with_opacity(0.35, Colors.surface_2)
+                if active else ft.colors.with_opacity(0.0, Colors.surface)
+            ),
+            overlay_color={
+                ft.ControlState.HOVERED: ft.colors.with_opacity(0.15, Colors.primary),
+                ft.ControlState.DEFAULT: ft.colors.TRANSPARENT,
+            },
             shape=ft.RoundedRectangleBorder(radius=Radii.pill),
-            padding=ft.padding.symmetric(horizontal=15, vertical=10),
+            padding=ft.padding.symmetric(horizontal=18, vertical=10),
+        ),
+    )
+
+
+def _header_action_button(label: str, on_click) -> ft.Control:
+    return ft.TextButton(
+        label,
+        on_click=on_click,
+        style=ft.ButtonStyle(
+            color=ft.colors.with_opacity(0.95, Colors.text_secondary),
+            overlay_color={
+                ft.ControlState.HOVERED: ft.colors.with_opacity(0.12, Colors.primary),
+                ft.ControlState.DEFAULT: ft.colors.TRANSPARENT,
+            },
+            shape=ft.RoundedRectangleBorder(radius=Radii.pill),
+            padding=ft.padding.symmetric(horizontal=14, vertical=10),
         ),
     )
 

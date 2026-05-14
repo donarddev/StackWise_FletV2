@@ -8,7 +8,9 @@ from ui.components.auth_card import auth_card
 from ui.themes.app_theme import Colors, Radii, Spacing
 
 
-def auth_modal(*, form: ft.Control, on_close) -> ft.AlertDialog:
+def auth_modal(*, form: ft.Control, on_close, max_height: int | None = None) -> ft.AlertDialog:
+    modal_height = max_height or 620
+    scroll_region_height = max(320, modal_height - 92)
     return ft.AlertDialog(
         modal=True,
         bgcolor=ft.colors.TRANSPARENT,
@@ -16,6 +18,7 @@ def auth_modal(*, form: ft.Control, on_close) -> ft.AlertDialog:
         inset_padding=ft.padding.symmetric(horizontal=28, vertical=20),
         content=ft.Container(
             width=458,
+            height=modal_height,
             content=auth_card(
                 ft.Column(
                     spacing=Spacing.md,
@@ -32,7 +35,16 @@ def auth_modal(*, form: ft.Control, on_close) -> ft.AlertDialog:
                                 ),
                             ],
                         ),
-                        form,
+                        ft.Container(
+                            height=scroll_region_height,
+                            content=ft.ListView(
+                                expand=True,
+                                spacing=0,
+                                auto_scroll=False,
+                                padding=ft.padding.only(right=6, bottom=34),
+                                controls=[form],
+                            ),
+                        ),
                     ],
                 ),
                 width=452,

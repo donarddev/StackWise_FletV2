@@ -29,27 +29,28 @@ class RecommendationRepository(BaseRepository):
                 complexity, team_size, timeline, scalability, security,
                 platform, experience,
                 recommended_language, recommended_framework, recommended_sdlc,
-                confidence_score, explanation_json, alternatives_json
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                confidence_score, explanation_json, alternatives_json, project_profile_json
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 user_id,
                 request["project_name"],
                 request["project_type"],
-                request["project_goal"],
+                request["project_goal"][:80],
                 request["complexity"],
                 request["team_size"],
                 request["timeline"],
-                request["scalability"],
-                request["security"],
-                request["platform"],
-                request["experience"],
+                request["scalability_needs"],
+                request["security_requirements"],
+                request["preferred_platform"],
+                request["development_experience"],
                 result["recommended_language"],
                 result["recommended_framework"],
                 result["recommended_sdlc"],
                 int(result["confidence_score"]),
                 json.dumps(result.get("explanation", {})),
                 json.dumps(result.get("alternatives", {})),
+                json.dumps(request),
             ),
         )
         self.add_history(user_id, new_id, "created")

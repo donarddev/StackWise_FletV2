@@ -9,6 +9,7 @@ import flet as ft
 from ui.components.auth_brand_header import auth_brand_header
 from ui.components.auth_text_field import auth_text_field
 from ui.components.primary_button import primary_button, text_link
+from ui.components.google_button import google_button
 from ui.components.validation_message import validation_message
 from ui.layouts.auth_layout import auth_layout
 from ui.themes.app_theme import Colors, Spacing, Typography
@@ -17,6 +18,7 @@ from ui.themes.app_theme import Colors, Spacing, Typography
 def build_login_page(
     *,
     on_login: Callable[[str, str], None],
+    on_google: Callable[[ft.ControlEvent], None],
     on_go_register: Callable[[ft.ControlEvent], None],
     error_container_ref: ft.Ref[ft.Container],
     error_text_ref: ft.Ref[ft.Text],
@@ -26,6 +28,7 @@ def build_login_page(
 ) -> ft.Control:
     form = build_login_form(
         on_login=on_login,
+        on_google=on_google,
         on_go_register=on_go_register,
         error_container_ref=error_container_ref,
         error_text_ref=error_text_ref,
@@ -39,6 +42,7 @@ def build_login_page(
 def build_login_form(
     *,
     on_login: Callable[[str, str], None],
+    on_google: Callable[[ft.ControlEvent], None],
     on_go_register: Callable[[ft.ControlEvent], None],
     error_container_ref: ft.Ref[ft.Container],
     error_text_ref: ft.Ref[ft.Text],
@@ -90,11 +94,26 @@ def build_login_form(
             fields["password"],
             error,
             ft.Container(height=Spacing.xs),
-            ft.Row(
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                controls=[submit, submitting],
-                spacing=Spacing.md,
+            ft.Container(
+                padding=ft.padding.symmetric(vertical=6),
+                content=ft.Row(
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[submit, submitting],
+                    spacing=Spacing.md,
+                ),
             ),
+            ft.Container(height=Spacing.sm),
+            ft.Row(
+                spacing=8,
+                alignment=ft.MainAxisAlignment.CENTER,
+                controls=[
+                    ft.Container(expand=True, content=ft.Divider(thickness=1, color=Colors.border)),
+                    ft.Container(content=ft.Text("or", size=13, color=Colors.text_secondary)),
+                    ft.Container(expand=True, content=ft.Divider(thickness=1, color=Colors.border)),
+                ],
+            ),
+            ft.Container(height=Spacing.xs),
+            google_button("Continue with Google", on_click=on_google, expand=True),
             ft.Container(height=Spacing.sm),
             ft.Row(
                 spacing=4,

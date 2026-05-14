@@ -2,22 +2,28 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Any, Callable, Mapping, Optional
 
 import flet as ft
 
 from app.models.recommendation import Recommendation
-from app.utils.constants import (
+from app.requests.recommendation_request import (
+    BUDGET_CONSTRAINTS_LEVELS,
     COMPLEXITY_LEVELS,
-    EXPERIENCE_LEVELS,
-    PLATFORMS,
-    PROJECT_GOALS,
+    DEPLOYMENT_PREFERENCES,
+    DEVELOPMENT_EXPERIENCE_LEVELS,
+    FEATURE_OPTIONS,
+    MAINTENANCE_EXPECTATIONS_LEVELS,
+    PERFORMANCE_REQUIREMENTS_LEVELS,
+    PREFERRED_PLATFORMS,
     PROJECT_TYPES,
-    SCALABILITY_LEVELS,
-    SECURITY_LEVELS,
-    TEAM_SIZES,
+    REQUIREMENTS_STABILITY_LEVELS,
+    SCALABILITY_NEEDS_LEVELS,
+    SECURITY_REQUIREMENTS_LEVELS,
+    STAKEHOLDER_INVOLVEMENT_LEVELS,
     TIMELINES,
 )
+from ui.components.dashboard.glass_tokens import dashboard_glass_tokens
 from ui.components.empty_state import empty_state
 from ui.components.glass_card import glass_card
 from ui.components.input_field import input_field
@@ -25,38 +31,103 @@ from ui.components.page_header import page_header
 from ui.components.primary_button import primary_button, secondary_button
 from ui.components.section_header import section_header
 from ui.components.select_field import select_field
-from ui.themes.app_theme import Colors, Radii, Spacing, Typography
+from ui.themes.app_theme import Radii, Spacing
+from ui.theme import caption_style, heading_style, subheading_style, text_style
 from ui.widgets.recommendation_card import recommendation_result_card
 
 
+def recommendation_workspace_theme(theme: Mapping[str, Any]) -> dict[str, Any]:
+    """Dark-workspace tokens aligned with dashboard glass (navy cards, cyan accents).
+
+    Used only for the Recommendation screen so inputs/cards match the dashboard
+    without changing global workspace tokens for other routes.
+    """
+    t = dict(theme)
+    if str(t.get("page_bg", "")).lower() != "#020617":
+        return t
+    g = dashboard_glass_tokens(theme)
+    cyan = str(theme["accent_2"])
+    t.update(
+        {
+            "card_bg": g["card_bg"],
+            "border": g["card_border"],
+            "border_strong": "#26364D",
+            "surface": "#101A2B",
+            "surface_2": g["panel_bg"],
+            "surface_3": g["card_hover"],
+            "accent": cyan,
+            "accent_soft": "#67E8F9",
+            "accent_glow": "#5EEAD4",
+            "on_gradient": "#06111F",
+            "button_shadow": ft.colors.with_opacity(0.22, cyan),
+            "secondary_surface": ft.colors.with_opacity(0.28, "#111C2E"),
+        }
+    )
+    return t
+
+
 class RecommendationFormFields:
-    def __init__(self) -> None:
+    def __init__(self, theme: Mapping[str, Any]) -> None:
+        t = theme
         self.project_name = input_field(
-            "Project name", hint="e.g. Aurora — content marketplace",
-            icon=ft.icons.STAR_OUTLINE,
+            "Project Name *", hint="Example: Online Enrollment System",
+            icon=ft.icons.STAR_OUTLINE, theme=t,
         )
-        self.project_type = select_field("Project type", PROJECT_TYPES)
-        self.project_goal = select_field("Project goal", PROJECT_GOALS)
-        self.complexity = select_field("Complexity", COMPLEXITY_LEVELS)
-        self.team_size = select_field("Team size", TEAM_SIZES)
-        self.timeline = select_field("Timeline", TIMELINES)
-        self.scalability = select_field("Scalability requirement", SCALABILITY_LEVELS)
-        self.security = select_field("Security requirement", SECURITY_LEVELS)
-        self.platform = select_field("Preferred platform", PLATFORMS)
-        self.experience = select_field("Development experience", EXPERIENCE_LEVELS)
+        self.project_type = select_field("Project Type *", PROJECT_TYPES, theme=t)
+        self.project_goal = input_field(
+            "Project Goal *",
+            hint="Describe the main purpose, features, and expected outcome of your project...",
+            multiline=True,
+            min_lines=3,
+            max_lines=5,
+            theme=t,
+        )
+        self.team_size = input_field("Team Size *", hint="Example: 3", icon=ft.icons.GROUPS_2_OUTLINED, theme=t)
+        self.complexity = select_field("Complexity *", COMPLEXITY_LEVELS, theme=t)
+        self.timeline = select_field("Timeline *", TIMELINES, theme=t)
+        self.requirements_stability = select_field("Requirements Stability *", REQUIREMENTS_STABILITY_LEVELS, theme=t)
+        self.stakeholder_involvement = select_field("Stakeholder Involvement *", STAKEHOLDER_INVOLVEMENT_LEVELS, theme=t)
+        self.preferred_platform = select_field("Preferred Platform *", PREFERRED_PLATFORMS, theme=t)
+        self.development_experience = select_field("Development Experience *", DEVELOPMENT_EXPERIENCE_LEVELS, theme=t)
+        self.scalability_needs = select_field("Scalability Needs *", SCALABILITY_NEEDS_LEVELS, theme=t)
+        self.performance_requirements = select_field("Performance Requirements *", PERFORMANCE_REQUIREMENTS_LEVELS, theme=t)
+        self.security_requirements = select_field("Security Requirements *", SECURITY_REQUIREMENTS_LEVELS, theme=t)
+        self.budget_constraints = select_field("Budget Constraints *", BUDGET_CONSTRAINTS_LEVELS, theme=t)
+        self.maintenance_expectations = select_field("Maintenance Expectations *", MAINTENANCE_EXPECTATIONS_LEVELS, theme=t)
+        self.deployment_preference = select_field("Deployment Preference *", DEPLOYMENT_PREFERENCES, theme=t)
+        self.feature_checks = {
+            feature: ft.Checkbox(
+                label=feature,
+                value=False,
+                check_color=t["on_gradient"],
+                active_color=t["accent_2"],
+                label_style=ft.TextStyle(size=12.5, color=t["text_secondary"]),
+            )
+            for feature in FEATURE_OPTIONS
+        }
+
+    def selected_features(self) -> list[str]:
+        return [name for name, cb in self.feature_checks.items() if cb.value]
 
     def values(self) -> dict[str, str]:
         return {
             "project_name": self.project_name.value or "",
             "project_type": self.project_type.value or "",
+            "selected_features": "|".join(self.selected_features()),
             "project_goal": self.project_goal.value or "",
-            "complexity": self.complexity.value or "",
             "team_size": self.team_size.value or "",
+            "complexity": self.complexity.value or "",
             "timeline": self.timeline.value or "",
-            "scalability": self.scalability.value or "",
-            "security": self.security.value or "",
-            "platform": self.platform.value or "",
-            "experience": self.experience.value or "",
+            "requirements_stability": self.requirements_stability.value or "",
+            "stakeholder_involvement": self.stakeholder_involvement.value or "",
+            "preferred_platform": self.preferred_platform.value or "",
+            "development_experience": self.development_experience.value or "",
+            "scalability_needs": self.scalability_needs.value or "",
+            "performance_requirements": self.performance_requirements.value or "",
+            "security_requirements": self.security_requirements.value or "",
+            "budget_constraints": self.budget_constraints.value or "",
+            "maintenance_expectations": self.maintenance_expectations.value or "",
+            "deployment_preference": self.deployment_preference.value or "",
         }
 
 
@@ -68,61 +139,201 @@ def build_recommendation_page(
     result_panel_ref: ft.Ref[ft.Column],
     on_generate: Callable[[ft.ControlEvent], None],
     on_reset: Callable[[ft.ControlEvent], None],
+    on_back: Callable[[ft.ControlEvent], None],
+    theme: Mapping[str, Any],
     initial_recommendation: Optional[Recommendation] = None,
 ) -> ft.Control:
     error_text = ft.Text(
-        "", size=12.5, color=Colors.danger, ref=error_text_ref, visible=False,
+        "", size=12.5, color=theme["danger"], ref=error_text_ref, visible=False,
     )
     submitting = ft.ProgressRing(
-        width=18, height=18, stroke_width=2, color=Colors.primary_glow,
+        width=18, height=18, stroke_width=2, color=theme["accent_2"],
         visible=False, ref=submitting_ref,
     )
+
+    g = dashboard_glass_tokens(theme)
+    outline_bd = ft.colors.with_opacity(0.72, g["card_border"])
+    hover_bd = g["teal"]
+    outline_bg = ft.colors.with_opacity(0.28, theme["surface_2"])
 
     submit_row = ft.Row(
         spacing=Spacing.md, vertical_alignment=ft.CrossAxisAlignment.CENTER,
         controls=[
             primary_button(
-                "Generate recommendation",
+                "Generate Recommendation",
                 on_click=on_generate,
                 icon=ft.icons.AUTO_AWESOME,
+                theme=theme,
+                mint_fill=True,
+                border_radius=Radii.pill,
             ),
-            secondary_button("Reset", on_click=on_reset, icon=ft.icons.REFRESH),
+            secondary_button(
+                "Reset",
+                on_click=on_reset,
+                icon=ft.icons.REFRESH,
+                theme=theme,
+                height=44,
+                border_radius=Radii.pill,
+                bgcolor=outline_bg,
+                border_color=outline_bd,
+                hover_border_color=hover_bd,
+            ),
+            secondary_button(
+                "Back to Dashboard",
+                on_click=on_back,
+                icon=ft.icons.HOME_OUTLINED,
+                theme=theme,
+                height=44,
+                border_radius=Radii.pill,
+                bgcolor=outline_bg,
+                border_color=outline_bd,
+                hover_border_color=hover_bd,
+            ),
             submitting,
         ],
+        wrap=True,
     )
 
-    form_card = glass_card(
+    profile_card = _section_card(
+        theme,
+        "Step 01",
+        "Project Profile",
+        "Describe what you are building and what outcome you want the project to achieve.",
         ft.Column(
             spacing=Spacing.md,
             controls=[
-                section_header(
-                    "Project profile",
-                    subtitle="The more accurate this is, the more confident the recommendation.",
-                ),
                 fields.project_name,
+                ft.Text("Use a clear title so the recommendation report stays easy to read.", style=caption_style(theme)),
+                fields.project_type,
+                ft.Text("Selected Features *", style=heading_style(theme, size=13, weight=ft.FontWeight.W_600)),
+                ft.Container(
+                    height=116,
+                    padding=ft.padding.symmetric(horizontal=10, vertical=6),
+                    border=ft.border.all(1, theme["border_strong"]),
+                    border_radius=Radii.md,
+                    bgcolor=theme["surface"],
+                    content=ft.Column(
+                        spacing=2,
+                        scroll=ft.ScrollMode.AUTO,
+                        controls=list(fields.feature_checks.values()),
+                    ),
+                ),
+                ft.Text(
+                    "Pick the most important features so the engine can score realistically.",
+                    style=caption_style(theme),
+                ),
+                fields.project_goal,
+                ft.Text(
+                    "Mention intended users, major features, and the expected end result.",
+                    style=caption_style(theme),
+                ),
+            ],
+        ),
+    )
+
+    context_card = _section_card(
+        theme,
+        "Step 02",
+        "Development Context",
+        "Share your team size, complexity, and delivery timeline.",
+        ft.ResponsiveRow(
+            spacing=Spacing.md,
+            run_spacing=Spacing.md,
+            controls=[
+                ft.Container(col={"xs": 12, "md": 4}, content=fields.team_size),
+                ft.Container(col={"xs": 12, "md": 4}, content=fields.complexity),
+                ft.Container(col={"xs": 12, "md": 4}, content=fields.timeline),
+                ft.Container(col={"xs": 12, "md": 6}, content=fields.requirements_stability),
+                ft.Container(col={"xs": 12, "md": 6}, content=fields.stakeholder_involvement),
+            ],
+        ),
+    )
+
+    preference_card = _section_card(
+        theme,
+        "Step 03",
+        "Technical Preference",
+        "Tell StackWise AI about platform and current development experience.",
+        ft.ResponsiveRow(
+            spacing=Spacing.md,
+            run_spacing=Spacing.md,
+            controls=[
+                ft.Container(col={"xs": 12, "md": 6}, content=fields.preferred_platform),
+                ft.Container(col={"xs": 12, "md": 6}, content=fields.development_experience),
+                ft.Container(col={"xs": 12, "md": 6}, content=fields.scalability_needs),
+                ft.Container(col={"xs": 12, "md": 6}, content=fields.performance_requirements),
+                ft.Container(col={"xs": 12, "md": 6}, content=fields.security_requirements),
+                ft.Container(col={"xs": 12, "md": 6}, content=fields.budget_constraints),
+                ft.Container(col={"xs": 12, "md": 6}, content=fields.maintenance_expectations),
+                ft.Container(col={"xs": 12, "md": 6}, content=fields.deployment_preference),
+            ],
+        ),
+    )
+
+    generate_card = _section_card(
+        theme,
+        "Step 04",
+        "Generate Decision Report",
+        "Your submission will produce an explainable report ready for review or presentation.",
+        ft.Column(
+            spacing=Spacing.md,
+            controls=[
                 ft.ResponsiveRow(
-                    spacing=Spacing.md, run_spacing=Spacing.md,
                     controls=[
-                        ft.Container(col={"xs": 12, "md": 6}, content=fields.project_type),
-                        ft.Container(col={"xs": 12, "md": 6}, content=fields.project_goal),
-                        ft.Container(col={"xs": 12, "md": 6}, content=fields.complexity),
-                        ft.Container(col={"xs": 12, "md": 6}, content=fields.team_size),
-                        ft.Container(col={"xs": 12, "md": 6}, content=fields.timeline),
-                        ft.Container(col={"xs": 12, "md": 6}, content=fields.scalability),
-                        ft.Container(col={"xs": 12, "md": 6}, content=fields.security),
-                        ft.Container(col={"xs": 12, "md": 6}, content=fields.platform),
-                        ft.Container(col={"xs": 12, "md": 6}, content=fields.experience),
+                        ft.Container(
+                            col={"xs": 12, "md": 7},
+                            content=glass_card(
+                                ft.Column(
+                                    spacing=6,
+                                    controls=[
+                                        ft.Text("What the report includes", style=subheading_style(theme, size=18)),
+                                        ft.Text(
+                                            "Language recommendation, framework matching, SDLC model selection, "
+                                            "confidence score, alternatives, risk analysis, skill gaps, and roadmap.",
+                                            style=text_style(theme, size=13),
+                                        ),
+                                    ],
+                                ),
+                                theme=theme,
+                            ),
+                        ),
+                        ft.Container(
+                            col={"xs": 12, "md": 5},
+                            content=ft.Container(
+                                padding=ft.padding.symmetric(horizontal=14, vertical=12),
+                                border_radius=Radii.lg,
+                                bgcolor=ft.colors.with_opacity(0.10, theme["accent_2"]),
+                                border=ft.border.all(1, ft.colors.with_opacity(0.38, theme["accent_2"])),
+                                content=ft.Text(
+                                    "This final report is readable in class, shareable with teammates, and easy to revisit.",
+                                    style=text_style(theme, size=12.5),
+                                ),
+                            ),
+                        ),
+                    ]
+                ),
+                ft.ResponsiveRow(
+                    spacing=Spacing.sm,
+                    run_spacing=Spacing.sm,
+                    controls=[
+                        ft.Container(col={"xs": 12, "md": 4}, content=_mini_highlight(theme, "Explainable Results")),
+                        ft.Container(col={"xs": 12, "md": 4}, content=_mini_highlight(theme, "Saved Recommendation")),
+                        ft.Container(col={"xs": 12, "md": 4}, content=_mini_highlight(theme, "Roadmap Included")),
                     ],
                 ),
                 error_text,
-                ft.Container(height=Spacing.sm),
                 submit_row,
             ],
-        )
+        ),
+    )
+
+    form_card = ft.Column(
+        spacing=Spacing.lg,
+        controls=[profile_card, context_card, preference_card, generate_card],
     )
 
     initial_panel = (
-        recommendation_result_card(initial_recommendation)
+        recommendation_result_card(initial_recommendation, theme=theme)
         if initial_recommendation
         else empty_state(
             icon=ft.icons.SCIENCE_OUTLINED,
@@ -131,6 +342,7 @@ def build_recommendation_page(
                 "Fill out the form on the left. StackWise will analyze it across nine dimensions "
                 "and return an explainable recommendation in under a second."
             ),
+            theme=theme,
         )
     )
 
@@ -140,17 +352,18 @@ def build_recommendation_page(
         ref=result_panel_ref,
     )
 
-    explainer_card = _explainer_card()
+    explainer_card = _guidance_card(theme)
+    submit_note = _submit_note_card(theme)
 
     page_body = ft.ResponsiveRow(
         spacing=Spacing.lg, run_spacing=Spacing.lg,
         controls=[
-            ft.Container(col={"xs": 12, "lg": 7}, content=form_card),
+            ft.Container(col={"xs": 12, "lg": 8}, content=form_card),
             ft.Container(
-                col={"xs": 12, "lg": 5},
+                col={"xs": 12, "lg": 4},
                 content=ft.Column(
                     spacing=Spacing.md,
-                    controls=[result_column, explainer_card],
+                    controls=[explainer_card, submit_note, result_column],
                 ),
             ),
         ],
@@ -160,23 +373,29 @@ def build_recommendation_page(
         spacing=Spacing.xl,
         controls=[
             page_header(
-                eyebrow="RECOMMENDATION GENERATOR",
-                title="Choose the right stack — explainably.",
-                subtitle="Project profile in. Language, framework, SDLC + reasoning out.",
+                eyebrow="Project Assessment",
+                title="Tell StackWise AI about your project",
+                subtitle=(
+                    "Provide your project details so the system can recommend a suitable "
+                    "programming language, framework, and SDLC model."
+                ),
+                theme=theme,
             ),
             page_body,
         ],
     )
 
 
-def _explainer_card() -> ft.Control:
+def _guidance_card(theme: Mapping[str, Any]) -> ft.Control:
     items = [
-        ("Hybrid engine",
-         "Deterministic scoring across nine weighted dimensions, optionally enriched by Ollama."),
-        ("Confidence score",
-         "Computed from the margin between top and runner-up candidates."),
-        ("Trade-offs included",
-         "Each recommendation lists what to watch out for as the project evolves."),
+        ("Project type", "Helps identify whether the project is web, mobile, desktop, API, or AI-focused."),
+        ("Complexity", "Signals how much structure and risk management the report should recommend."),
+        ("Team size", "Affects pace, division of work, and practical delivery recommendations."),
+        ("Preferred platform", "Aligns the stack with the environment you actually want to build for."),
+        ("Development experience", "Keeps recommendations beginner-friendly or more advanced as needed."),
+        ("Timeline", "Helps decide between iterative and more sequential delivery approaches."),
+        ("Project goal keywords", "Description text helps detect intent, features, and expected outcomes."),
+        ("Scalability + security", "Non-functional requirements strongly influence technology fit and SDLC."),
     ]
     rows = []
     for title, body in items:
@@ -185,17 +404,16 @@ def _explainer_card() -> ft.Control:
                 spacing=Spacing.md, vertical_alignment=ft.CrossAxisAlignment.START,
                 controls=[
                     ft.Container(
-                        width=24, height=24, border_radius=8,
-                        bgcolor=ft.colors.with_opacity(0.14, Colors.primary),
+                        width=24, height=24, border_radius=999,
+                        bgcolor=ft.colors.with_opacity(0.12, theme["accent_2"]),
                         alignment=ft.alignment.center,
-                        content=ft.Icon(ft.icons.CHECK, size=14, color=Colors.primary_glow),
+                        content=ft.Icon(ft.icons.CIRCLE, size=8, color=theme["accent_2"]),
                     ),
                     ft.Column(
                         spacing=2, tight=True,
                         controls=[
-                            ft.Text(title, size=13, weight=ft.FontWeight.W_700,
-                                    color=Colors.text_primary),
-                            ft.Text(body, style=Typography.body(size=12.5)),
+                            ft.Text(title, size=13, weight=ft.FontWeight.W_700, color=theme["text"]),
+                            ft.Text(body, style=text_style(theme, size=12.5)),
                         ],
                         expand=True,
                     ),
@@ -206,8 +424,72 @@ def _explainer_card() -> ft.Control:
         ft.Column(
             spacing=Spacing.md,
             controls=[
-                ft.Text("How StackWise thinks", style=Typography.subheading(size=15)),
+                ft.Text("How StackWise thinks", style=subheading_style(theme, size=15)),
                 *rows,
             ],
-        )
+        ),
+        theme=theme,
+    )
+
+
+def _submit_note_card(theme: Mapping[str, Any]) -> ft.Control:
+    return glass_card(
+        ft.Column(
+            spacing=Spacing.sm,
+            controls=[
+                ft.Text("Before you submit", style=subheading_style(theme, size=15)),
+                ft.Text(
+                    "StackWise AI will store the recommendation, show the result, and keep the report available for future review.",
+                    style=text_style(theme, size=12.5),
+                ),
+            ],
+        ),
+        theme=theme,
+    )
+
+
+def _section_card(theme: Mapping[str, Any], step: str, title: str, subtitle: str, body: ft.Control) -> ft.Control:
+    return glass_card(
+        ft.Column(
+            spacing=Spacing.md,
+            controls=[
+                ft.Row(
+                    spacing=8,
+                    controls=[
+                        ft.Container(
+                            padding=ft.padding.symmetric(horizontal=10, vertical=5),
+                            border_radius=Radii.pill,
+                            bgcolor=ft.colors.with_opacity(0.12, theme["accent_2"]),
+                            border=ft.border.all(1, ft.colors.with_opacity(0.35, theme["accent_2"])),
+                            content=ft.Text(step, size=11.5, weight=ft.FontWeight.W_700, color=theme["accent_2"]),
+                        ),
+                    ],
+                ),
+                section_header(title, subtitle=subtitle, theme=theme),
+                body,
+            ],
+        ),
+        theme=theme,
+    )
+
+
+def _mini_highlight(theme: Mapping[str, Any], title: str) -> ft.Control:
+    g = dashboard_glass_tokens(theme)
+    header_bg = g.get("header_bg", theme["surface_3"])
+    header_bd = g.get("header_border", theme["border_strong"])
+    return ft.Container(
+        padding=ft.padding.symmetric(horizontal=12, vertical=10),
+        border_radius=Radii.md,
+        bgcolor=header_bg,
+        border=ft.border.all(1, header_bd),
+        content=ft.Column(
+            spacing=4,
+            controls=[
+                ft.Text(title, style=subheading_style(theme, size=13)),
+                ft.Text(
+                    "Included in the final explainable recommendation package.",
+                    style=caption_style(theme),
+                ),
+            ],
+        ),
     )

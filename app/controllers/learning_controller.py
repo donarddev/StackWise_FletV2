@@ -15,6 +15,7 @@ from ui.pages.learning_page import (
     render_category_pills,
     render_learning_body,
 )
+from ui.theme import get_theme, is_dark_mode
 
 
 class LearningController(BaseController):
@@ -30,11 +31,13 @@ class LearningController(BaseController):
         categories = repo.list_categories()
         articles = self._load_articles()
 
+        theme = get_theme(is_dark_mode(self.page))
         search_field = input_field(
-            "Search articles...", value=self._search, icon=ft.icons.SEARCH,
+            "Search articles...", value=self._search, icon=ft.icons.SEARCH, theme=theme,
         )
 
         body = build_learning_page(
+            theme=theme,
             articles=articles,
             categories=categories,
             selected_category=self._category,
@@ -45,7 +48,7 @@ class LearningController(BaseController):
             body_ref=self._body_ref,
             pills_ref=self._pills_ref,
         )
-        return wrap_with_layout(self, current_route=Routes.LEARNING, body=body)
+        return wrap_with_layout(self, current_route=Routes.LEARNING, body=body, theme=theme)
 
     # ---------- handlers ----------
 
@@ -81,19 +84,24 @@ class LearningController(BaseController):
 
     def _refresh_inline(self, *, refresh_pills: bool = False) -> None:
         articles = self._load_articles()
+        th = get_theme(is_dark_mode(self.page))
         body_container = self._body_ref.current
         if body_container is not None:
             body_container.content = render_learning_body(
+                theme=th,
                 articles=articles, on_open_article=self._open_article,
             )
-            body_container.update()
+            if body_container.page:
+                body_container.update()
 
         if refresh_pills:
             pills_container = self._pills_ref.current
             if pills_container is not None:
                 pills_container.content = render_category_pills(
+                    theme=th,
                     categories=self.container.learning_repository.list_categories(),
                     selected_category=self._category,
                     on_category_change=self._on_category_change,
                 )
-                pills_container.update()
+                if pills_container.page:
+                    pills_container.update()

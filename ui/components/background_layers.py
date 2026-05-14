@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, Mapping
+
 import flet as ft
 
 from ui.themes.app_theme import Colors
@@ -35,6 +37,7 @@ def ambient_orb(
     x_offset: int = -120,
     y_offset: int = -120,
     opacity: float = 0.2,
+    fade_to: str = "#02061700",
 ) -> ft.Control:
     return ft.Container(
         width=size,
@@ -45,7 +48,7 @@ def ambient_orb(
             radius=0.9,
             colors=[
                 ft.colors.with_opacity(opacity, color_hex),
-                "#02061700",
+                fade_to,
             ],
         ),
         left=x_offset if align_left else None,
@@ -63,5 +66,38 @@ def shared_auth_backdrop() -> ft.Control:
             begin=ft.alignment.top_left,
             end=ft.alignment.bottom_right,
             colors=[Colors.background, "#081224", Colors.surface],
+        ),
+    )
+
+
+def themed_subtle_grid_layer(theme: Mapping[str, Any]) -> ft.Control:
+    """Grid overlay tuned for light or dark workspace."""
+    return ft.Container(
+        expand=True,
+        opacity=theme["grid_layer_opacity"],
+        content=ft.Column(
+            expand=True,
+            spacing=0,
+            controls=[
+                ft.Container(
+                    expand=True,
+                    border=ft.border.all(
+                        1,
+                        ft.colors.with_opacity(theme["grid_cell_opacity"], theme["grid_line"]),
+                    ),
+                    border_radius=0,
+                )
+            ],
+        ),
+    )
+
+
+def themed_shared_auth_backdrop(theme: Mapping[str, Any]) -> ft.Control:
+    return ft.Container(
+        expand=True,
+        gradient=ft.LinearGradient(
+            begin=ft.alignment.top_left,
+            end=ft.alignment.bottom_right,
+            colors=list(theme["backdrop_colors"]),
         ),
     )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Optional
+from typing import Any, Iterable, Mapping, Optional
 
 import flet as ft
 
@@ -16,7 +16,26 @@ def select_field(
     value: Optional[str] = None,
     hint: Optional[str] = None,
     on_change=None,
+    theme: Optional[Mapping[str, Any]] = None,
 ) -> ft.Dropdown:
+    if theme is not None:
+        return ft.Dropdown(
+            label=label,
+            hint_text=hint,
+            value=value,
+            on_change=on_change,
+            options=[ft.dropdown.Option(o) for o in options],
+            bgcolor=theme["surface"],
+            border_color=theme["border_strong"],
+            focused_border_color=theme["accent"],
+            focused_bgcolor=theme["surface_3"],
+            color=theme["text"],
+            text_style=ft.TextStyle(color=theme["text"], size=14),
+            label_style=ft.TextStyle(color=theme["text_secondary"], size=13),
+            hint_style=ft.TextStyle(color=theme["text_muted"], size=13),
+            border_radius=Radii.md,
+            content_padding=ft.padding.symmetric(horizontal=14, vertical=14),
+        )
     return ft.Dropdown(
         label=label,
         hint_text=hint,

@@ -34,6 +34,7 @@ class Recommendation:
     confidence_score: int
     explanation: dict = field(default_factory=dict)
     alternatives: dict = field(default_factory=dict)
+    project_profile: dict = field(default_factory=dict)
 
     created_at: datetime = field(default_factory=datetime.now)
 
@@ -58,6 +59,7 @@ class Recommendation:
             confidence_score=int(row["confidence_score"]),
             explanation=json.loads(row["explanation_json"] or "{}"),
             alternatives=json.loads(row["alternatives_json"] or "{}"),
+            project_profile=json.loads(row.get("project_profile_json") or "{}"),
             created_at=from_db(row["created_at"]),
         )
 

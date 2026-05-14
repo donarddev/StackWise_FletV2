@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from typing import Any
 
 import flet as ft
 
@@ -14,7 +15,18 @@ from app.services.chatbot_service import ChatTurn
 from app.utils.constants import Routes
 from ui.components.toast import show_toast
 from ui.pages.chatbot_page import build_chatbot_page
+from ui.theme import get_theme, is_dark_mode
 from ui.widgets.chat_bubble import chat_bubble, typing_bubble
+
+
+def _scroll_chat_to_latest(col: ft.Column | None) -> None:
+    """Keep newest messages in view after the transcript updates."""
+    if col is None or col.page is None:
+        return
+    try:
+        col.scroll_to(delta=1_000_000_000, duration=200)
+    except Exception:
+        pass
 
 
 class ChatbotController(BaseController):
@@ -36,7 +48,8 @@ class ChatbotController(BaseController):
             input_field = input_ref.current
             if input_field is not None:
                 input_field.value = ""
-                input_field.update()
+                if input_field.page:
+                    input_field.update()
 
             self._append_message(messages_ref, role="user", content=text, author=user.full_name)
             self._append_typing(messages_ref)
@@ -53,7 +66,9 @@ class ChatbotController(BaseController):
             show_toast(self.page, "Conversation cleared.", kind="success")
             self.navigation.to_chatbot()
 
+        theme = get_theme(is_dark_mode(self.page))
         body = build_chatbot_page(
+            theme=theme,
             user_name=user.full_name,
             history=history,
             is_ollama_available=is_available,
@@ -61,9 +76,11 @@ class ChatbotController(BaseController):
             messages_column_ref=messages_ref,
             on_send=on_send,
             on_clear=on_clear,
+            page=self.page,
+            user_avatar_url=user.avatar_url,
         )
 
-        return wrap_with_layout(self, current_route=Routes.CHATBOT, body=body)
+        return wrap_with_layout(self, current_route=Routes.CHATBOT, body=body, theme=theme)
 
     # ---------- send pipeline ----------
 
@@ -106,15 +123,31 @@ class ChatbotController(BaseController):
         if len(col.controls) == 1 and not isinstance(col.controls[0], ft.Row):
             col.controls.clear()
 
-        col.controls.append(chat_bubble(role=role, content=content, author_name=author))
-        col.update()
+        th = get_theme(is_dark_mode(self.page))
+        u = self.container.session.user
+        bubble_kw: dict[str, Any] = {
+            "role": role,
+            "content": content,
+            "author_name": author,
+            "theme": th,
+            "page": self.page,
+        }
+        if role == "user" and u is not None:
+            bubble_kw["user_avatar_url"] = u.avatar_url
+        col.controls.append(chat_bubble(**bubble_kw))
+        if col.page:
+            col.update()
+            _scroll_chat_to_latest(col)
 
     def _append_typing(self, messages_ref: ft.Ref[ft.Column]) -> None:
         col = messages_ref.current
         if col is None:
             return
-        col.controls.append(typing_bubble())
-        col.update()
+        th = get_theme(is_dark_mode(self.page))
+        col.controls.append(typing_bubble(th))
+        if col.page:
+            col.update()
+            _scroll_chat_to_latest(col)
 
     def _replace_typing_with_reply(
         self,
@@ -128,5 +161,10 @@ class ChatbotController(BaseController):
             return
         if col.controls and isinstance(col.controls[-1], ft.Row):
             col.controls.pop()
-        col.controls.append(chat_bubble(role="assistant", content=content, author_name=author))
-        col.update()
+        th = get_theme(is_dark_mode(self.page))
+        col.controls.append(
+            chat_bubble(role="assistant", content=content, author_name=author, theme=th, page=self.page)
+        )
+        if col.page:
+            col.update()
+            _scroll_chat_to_latest(col)

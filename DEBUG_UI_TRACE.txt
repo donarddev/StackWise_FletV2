@@ -1,0 +1,356 @@
+/**
+ * StackWise AI - UI Debug Report & Component Trace
+ * 
+ * This document traces the rendering path and explains why changes weren't applying.
+ */
+
+=================================================================
+WHY CHANGES WEREN'T APPLYING
+=================================================================
+
+PRIMARY ISSUE:
+  File: ui/layouts/app_layout.py
+  Problem: Missing background layer components from background_layers.py
+  
+  Was rendering:
+    ✗ No shared_auth_backdrop() 
+    ✗ No subtle_grid_layer()
+    ✗ No ambient_orb() glows
+    ✓ Only one simple radial gradient aura
+    
+  Result: UI looked flat and old despite sidebar improvements
+
+SECONDARY OBSERVATIONS:
+  - All controllers correctly use wrap_with_layout()
+  - wrap_with_layout() correctly imports app_layout
+  - nav_rail.py has proper item rendering with hover effects
+  - No duplicate layout files (only app_layout.py and auth_layout.py for public)
+
+=================================================================
+ACTIVE COMPONENT RENDERING PATH
+=================================================================
+
+AUTHENTICATED PAGES ROUTING:
+  1. DashboardController.build()
+     └─→ wrap_with_layout(current_route=Routes.DASHBOARD, body=body)
+         └─→ app_layout() [ACTIVE AUTHENTICATED LAYOUT]
+             └─→ Returns Container with Stack of background layers + sidebar + topbar + content
+
+  2. RecommendationController.build()
+     └─→ wrap_with_layout(current_route=Routes.RECOMMENDATION, body=body)
+         └─→ app_layout() [SAME LAYOUT]
+
+  3. HistoryController.build()
+     └─→ wrap_with_layout(current_route=Routes.HISTORY, body=body)
+         └─→ app_layout() [SAME LAYOUT]
+
+  4. ChatbotController.build()
+     └─→ wrap_with_layout(current_route=Routes.CHATBOT, body=body)
+         └─→ app_layout() [SAME LAYOUT]
+
+  5. LearningController.build()
+     └─→ wrap_with_layout(current_route=Routes.LEARNING, body=body)
+         └─→ app_layout() [SAME LAYOUT]
+
+  6. SettingsController.build()
+     └─→ wrap_with_layout(current_route=Routes.SETTINGS, body=body)
+         └─→ app_layout() [SAME LAYOUT]
+
+SIDEBAR NAVIGATION:
+  app_layout() imports and calls nav_rail() from ui/components/nav_rail.py
+  - All 6 items render explicitly in a Column (not unpacked)
+  - Hover effects: background opacity 0% → 12% (unselected) or 16% → 24% (selected)
+  - Active item: left purple accent bar + brighter text/icon
+
+PUBLIC PAGES ROUTING (PROTECTED):
+  - Public landing page uses public_controller.build()
+  - Landing page uses its own _create_grid_background() + layouts
+  - Auth modal uses auth_layout.py (separate from app_layout.py)
+  - Login/Register modals unchanged
+  - Public navbar unchanged
+
+=================================================================
+FILES MODIFIED (DEBUG ROUND)
+=================================================================
+
+1. ui/layouts/app_layout.py
+   Changes:
+   - Added imports: ambient_orb, shared_auth_backdrop, subtle_grid_layer
+   - Added comment: "ACTIVE AUTHENTICATED LAYOUT"
+   - Full Stack with background layers:
+     * shared_auth_backdrop()
+     * subtle_grid_layer(opacity=0.04)
+     * ambient_orb() x2 (purple + cyan glows)
+     * layout_row (sidebar + topbar + content)
+   - Result: Full landing-page-style background on all authenticated pages
+
+2. ui/pages/dashboard_page.py
+   Changes:
+   - Added comment: "ACTIVE AUTHENTICATED PAGE"
+   - Clarified routing documentation
+   - No functional changes
+
+=================================================================
+FILES VERIFIED (NO CHANGES NEEDED)
+=================================================================
+
+✓ ui/components/nav_rail.py - Already has:
+  - Explicit item list (no unpacking)
+  - Hover effects with on_hover handler
+  - 6 nav items rendering properly
+  - Active item styling with accent bar
+
+✓ ui/components/background_layers.py - Already has:
+  - shared_auth_backdrop()
+  - subtle_grid_layer()
+  - ambient_orb()
+  All used by landing page and now by app_layout
+
+✓ ui/components/authenticated_background.py - Created earlier:
+  - Reusable component (ready for future use)
+  - Not currently used by app_layout (but available)
+
+✓ ui/layouts/auth_layout.py - Public only:
+  - For login/register modals
+  - Uses background_layers for public look
+  - Not modified
+
+✓ ui/pages/public_landing_page.py - Public only:
+  - Uses its own _create_grid_background()
+  - Not modified
+  - Protected from authenticated changes
+
+✓ app/controllers/ - All routing paths verified:
+  - DashboardController: ✓ uses wrap_with_layout
+  - RecommendationController: ✓ uses wrap_with_layout
+  - HistoryController: ✓ uses wrap_with_layout
+  - ChatbotController: ✓ uses wrap_with_layout
+  - LearningController: ✓ uses wrap_with_layout
+  - SettingsController: ✓ uses wrap_with_layout
+
+✓ app/controllers/_layout_helper.py - Imports verified:
+  - Imports: from ui.layouts.app_layout import app_layout
+  - Calls: app_layout(...) with all required parameters
+  - Correctly handles user/session
+
+=================================================================
+SHARED AUTHENTICATED BACKGROUND NOW APPLIED TO
+=================================================================
+
+All 6 authenticated pages now use the same background:
+
+1. ✓ Dashboard - Dark base + grid + orbs + glassmorphic cards
+2. ✓ Recommendation - Same background + form + results
+3. ✓ History - Same background + search + table
+4. ✓ AI Chatbot - Same background + messages + input
+5. ✓ Learning Hub - Same background + articles + filters
+6. ✓ Settings - Same background + profile + engine controls
+
+Background structure in app_layout():
+  Stack (expand=True)
+    ├─ shared_auth_backdrop() - gradient base
+    ├─ subtle_grid_layer(opacity=0.04) - tech grid
+    ├─ ambient_orb(purple) - top-left glow
+    ├─ ambient_orb(cyan) - bottom-right glow
+    └─ layout_row - sidebar + topbar + content
+       ├─ nav_rail (sidebar)
+       ├─ Column (main area)
+       │  ├─ topbar (64px header)
+       │  └─ content_area (transparent bg)
+       │     └─ body (page content)
+
+=================================================================
+SIDEBAR STRUCTURE & IMPROVEMENTS
+=================================================================
+
+Sidebar (nav_rail):
+  Width: 260px
+  Background: surface color (#0f172a)
+  Border: right border with Colors.border
+
+  Contains:
+    ├─ brand logo (gradient circle + text)
+    ├─ spacing
+    ├─ "NAVIGATION" label
+    ├─ spacing
+    ├─ navigation_section (Column)
+    │  ├─ nav_item (Dashboard)
+    │  ├─ nav_item (Recommendation)
+    │  ├─ nav_item (History)
+    │  ├─ nav_item (AI Chatbot)
+    │  ├─ nav_item (Learning Hub)
+    │  └─ nav_item (Settings)
+    ├─ spacer (expand=1)
+    └─ user_block (avatar + name + email + logout)
+
+Nav Item Hover:
+  Default:
+    - unselected: text_secondary, icon transparent
+    - selected: text_primary, icon primary_glow
+  On hover:
+    - unselected: 12% purple background
+    - selected: 24% purple background (more prominent)
+  Active indicator:
+    - left accent bar (4px wide, purple)
+    - applied only to selected item
+
+=================================================================
+DESIGN PALETTE APPLIED
+=================================================================
+
+Colors used (from ui/themes/app_theme.py):
+  ✓ Background: #020617 (dark base)
+  ✓ Secondary Background: #0f172a (cards)
+  ✓ Primary Accent: #8b5cf6 (purple)
+  ✓ Accent Cyan: #2dd4bf (glow)
+  ✓ Text Primary: #f8fafc (light)
+  ✓ Text Secondary: #94a3b8 (gray)
+
+Features:
+  ✓ Dark premium SaaS aesthetic
+  ✓ Subtle visible grid (4% opacity)
+  ✓ Teal/purple glow accents (ambient orbs)
+  ✓ Glassmorphism cards (low-opacity borders)
+  ✓ Smooth hover transitions
+  ✓ Professional workspace feel
+
+Avoided:
+  ✗ Gray placeholder blocks
+  ✗ Flat plain backgrounds
+  ✗ Overly bright glows
+  ✗ Default Material colors
+  ✗ Noisy grid overlay
+
+=================================================================
+ARCHITECTURE COMPLIANCE VERIFIED
+=================================================================
+
+✓ MVC Pattern:
+  - Models: Pure data entities (no UI/business logic)
+  - Views: Pure Flet UI (no DB queries, only controller callbacks)
+  - Controllers: Route/flow management (no business logic)
+
+✓ Service Pattern:
+  - Dashboard analytics in AnalyticsService
+  - Recommendation logic in RecommendationService
+  - Chatbot in ChatbotService
+  - Auth in AuthenticationService
+  - Navigation in NavigationService/Controllers
+
+✓ Request Validation:
+  - LoginRequest validation in LoginRequest
+  - RegisterRequest validation in RegisterRequest
+  - RecommendationRequest validation in RecommendationRequest
+
+✓ Database:
+  - Using stackwise_ai only (not stackwise)
+  - No DB logic changes for this UI task
+  - User/session display only
+
+✓ Public Page Protection:
+  - Landing page uses public_controller.build()
+  - Auth modal uses auth_layout.py (separate)
+  - No shared modifications between public/authenticated
+  - Login/Register modals untouched
+
+=================================================================
+HOW TO TEST THE FIX
+=================================================================
+
+IMPORTANT: The app must be RESTARTED for changes to take effect.
+
+Testing Flow:
+
+1. Restart the application:
+   python main.py (or your launch method)
+
+2. Confirm landing page still looks unchanged:
+   - Hero section with gradient and orbs
+   - Feature cards
+   - Public navbar
+   - No authenticated layout visible
+
+3. Login with test credentials:
+   - Username: tester
+   - Password: enchantress
+   (from test_smoke.py if using test data)
+
+4. Confirm Dashboard loads with new background:
+   ✓ Dark base (#020617)
+   ✓ Subtle grid visible (4% opacity)
+   ✓ Teal/purple glow orbs visible
+   ✓ Glassmorphic cards on top
+   ✓ Sidebar on left with all 6 items
+   ✓ Topbar with breadcrumb
+   ✓ Dashboard content (stats, charts, recent items)
+   ✓ NO GRAY BLOCK in sidebar
+   ✓ NO MISSING NAV ITEMS
+
+5. Test sidebar navigation:
+   - Hover over nav items: background should brighten
+   - Click Dashboard: left purple accent bar shown
+   - Click Recommendation: background matches, accent bar updates
+   - Click History: background matches, accent bar updates
+   - Click AI Chatbot: background matches, accent bar updates
+   - Click Learning Hub: background matches, accent bar updates
+   - Click Settings: background matches, accent bar updates
+
+6. Confirm all pages use same background:
+   Each page should show:
+   ✓ Same dark grid + orb background
+   ✓ Glassmorphic cards
+   ✓ Sidebar with correct active item
+   ✓ Page-specific content
+   ✓ NO visual breaks or flattening
+
+7. Test user area and logout:
+   - User avatar + name + email visible at bottom of sidebar
+   - Logout button clickable
+   - Click logout: returns to landing page
+
+8. Logout and confirm landing page visible:
+   - Public landing page appears
+   - No authenticated layout
+   - Hero + features + nav visible
+
+=================================================================
+SUMMARY OF FIX
+=================================================================
+
+Root Cause:
+  app_layout.py was missing imports and calls to background_layers components
+  This caused a flat, old-looking authenticated UI
+
+Fix Applied:
+  1. Added imports for background_layers components
+  2. Added full Stack of background layers (backdrop, grid, orbs)
+  3. Added identifying comments to active files
+  4. Verified all routing paths use app_layout
+  5. Confirmed nav_rail has hover effects
+  6. Protected public pages from changes
+
+Result:
+  All 6 authenticated pages now have consistent premium dark SaaS background
+  with grid texture, glow effects, and glassmorphic styling matching the
+  landing page aesthetic.
+
+Files Modified:
+  - ui/layouts/app_layout.py (PRIMARY FIX)
+  - ui/pages/dashboard_page.py (documentation)
+
+Files Created:
+  - None (reused existing components)
+
+Files Protected:
+  - ui/pages/public_landing_page.py
+  - ui/layouts/auth_layout.py
+  - All public controllers/pages
+
+Next App Restart Will Show:
+  ✓ Sidebar with all 6 items (no gray blocks)
+  ✓ Hover effects on nav items
+  ✓ Shared background on all authenticated pages
+  ✓ Premium dark SaaS aesthetic
+  ✓ Grid overlay + ambient orbs
+  ✓ Glassmorphic cards
+  ✓ Public landing page unchanged

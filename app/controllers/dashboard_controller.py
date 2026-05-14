@@ -10,6 +10,7 @@ from app.models.recommendation import Recommendation
 from app.utils.constants import Routes
 from ui.dialogs.recommendation_detail_dialog import build_recommendation_detail_dialog
 from ui.pages.dashboard_page import build_dashboard_page
+from ui.theme import get_theme, is_dark_mode
 
 
 class DashboardController(BaseController):
@@ -18,8 +19,9 @@ class DashboardController(BaseController):
         assert user is not None
 
         snapshot = self.container.analytics_service.snapshot_for_user(user.id)
-        recent = self.container.recommendation_repository.latest_for_user(user.id, limit=3)
+        recent = self.container.recommendation_repository.latest_for_user(user.id, limit=5)
 
+        theme = get_theme(is_dark_mode(self.page))
         body = build_dashboard_page(
             user=user,
             snapshot=snapshot,
@@ -29,9 +31,10 @@ class DashboardController(BaseController):
             on_open_chatbot=lambda _e: self.navigation.to_chatbot(),
             on_view_recommendation=self._show_detail,
             on_regenerate=self._regenerate,
+            theme=theme,
         )
 
-        return wrap_with_layout(self, current_route=Routes.DASHBOARD, body=body)
+        return wrap_with_layout(self, current_route=Routes.DASHBOARD, body=body, theme=theme)
 
     def _show_detail(self, rec: Recommendation) -> None:
         user = self.container.session.user

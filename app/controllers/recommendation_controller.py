@@ -10,7 +10,12 @@ from app.requests.recommendation_request import RecommendationRequest
 from app.utils.constants import Routes
 from ui.components.toast import show_toast
 from ui.dialogs.recommendation_detail_dialog import build_recommendation_detail_dialog
-from ui.pages.recommendation_page import RecommendationFormFields, build_recommendation_page
+from ui.pages.recommendation_page import (
+    RecommendationFormFields,
+    build_recommendation_page,
+    recommendation_workspace_theme,
+)
+from ui.theme import get_theme, is_dark_mode
 from ui.widgets.recommendation_card import recommendation_result_card
 
 
@@ -19,7 +24,9 @@ class RecommendationController(BaseController):
         user = self.container.session.user
         assert user is not None
 
-        fields = RecommendationFormFields()
+        theme = get_theme(is_dark_mode(self.page))
+        rw = recommendation_workspace_theme(theme)
+        fields = RecommendationFormFields(rw)
         error_ref = ft.Ref[ft.Text]()
         progress_ref = ft.Ref[ft.ProgressRing]()
         result_panel_ref = ft.Ref[ft.Column]()
@@ -42,9 +49,11 @@ class RecommendationController(BaseController):
 
                 panel = result_panel_ref.current
                 if panel is not None:
+                    th = recommendation_workspace_theme(get_theme(is_dark_mode(self.page)))
                     panel.controls = [
                         recommendation_result_card(
                             rec,
+                            theme=th,
                             on_view=lambda _e, r=rec: self._show_detail(r),
                             on_regenerate=lambda _e, r=rec: self._regenerate(r),
                         )
@@ -55,13 +64,32 @@ class RecommendationController(BaseController):
 
         def on_reset(_e: ft.ControlEvent) -> None:
             for f in (
-                fields.project_name, fields.project_type, fields.project_goal,
-                fields.complexity, fields.team_size, fields.timeline,
-                fields.scalability, fields.security, fields.platform, fields.experience,
+                fields.project_name,
+                fields.project_type,
+                fields.project_goal,
+                fields.team_size,
+                fields.complexity,
+                fields.timeline,
+                fields.requirements_stability,
+                fields.stakeholder_involvement,
+                fields.preferred_platform,
+                fields.development_experience,
+                fields.scalability_needs,
+                fields.performance_requirements,
+                fields.security_requirements,
+                fields.budget_constraints,
+                fields.maintenance_expectations,
+                fields.deployment_preference,
             ):
                 f.value = None if isinstance(f, ft.Dropdown) else ""
                 f.update()
+            for cb in fields.feature_checks.values():
+                cb.value = False
+                cb.update()
             self._set_error(error_ref, "")
+
+        def on_back(_e: ft.ControlEvent) -> None:
+            self.navigation.to_dashboard()
 
         body = build_recommendation_page(
             fields=fields,
@@ -70,9 +98,11 @@ class RecommendationController(BaseController):
             result_panel_ref=result_panel_ref,
             on_generate=on_generate,
             on_reset=on_reset,
+            on_back=on_back,
+            theme=rw,
         )
 
-        return wrap_with_layout(self, current_route=Routes.RECOMMENDATION, body=body)
+        return wrap_with_layout(self, current_route=Routes.RECOMMENDATION, body=body, theme=theme)
 
     # ---------- helpers ----------
 

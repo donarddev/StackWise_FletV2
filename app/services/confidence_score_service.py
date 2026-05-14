@@ -48,9 +48,23 @@ class ConfidenceScoreService:
     @staticmethod
     def _completeness_bonus(request: "RecommendationRequest") -> float:
         fields = [
-            request.project_name, request.project_type, request.project_goal,
-            request.complexity, request.team_size, request.timeline,
-            request.scalability, request.security, request.platform, request.experience,
+            request.project_name,
+            request.project_type,
+            request.selected_features,
+            request.project_goal,
+            request.team_size,
+            request.complexity,
+            request.timeline,
+            request.requirements_stability,
+            request.stakeholder_involvement,
+            request.preferred_platform,
+            request.development_experience,
+            request.scalability_needs,
+            request.performance_requirements,
+            request.security_requirements,
+            request.budget_constraints,
+            request.maintenance_expectations,
+            request.deployment_preference,
         ]
         filled = sum(1 for f in fields if f)
         return (filled / len(fields)) * 6.0  # up to +6 points

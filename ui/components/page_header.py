@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 import flet as ft
 
 from ui.themes.app_theme import Colors, Radii, Spacing, Typography
+from ui.theme import display_style, text_style
 
 
 def page_header(
@@ -15,7 +16,49 @@ def page_header(
     title: str,
     subtitle: Optional[str] = None,
     trailing: Optional[ft.Control] = None,
+    theme: Optional[Mapping[str, Any]] = None,
 ) -> ft.Row:
+    if theme is not None:
+        eyebrow_pill = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Icon(ft.icons.AUTO_AWESOME, size=12, color=theme["accent_soft"]),
+                    ft.Text(
+                        eyebrow,
+                        style=ft.TextStyle(
+                            size=11,
+                            weight=ft.FontWeight.W_700,
+                            color=theme["accent_soft"],
+                        ),
+                    ),
+                ],
+                spacing=6, tight=True,
+            ),
+            bgcolor=ft.colors.with_opacity(0.14, theme["accent"]),
+            border=ft.border.all(1, ft.colors.with_opacity(0.4, theme["accent"])),
+            border_radius=Radii.pill,
+            padding=ft.padding.symmetric(horizontal=10, vertical=5),
+        )
+        return ft.Row(
+            controls=[
+                ft.Column(
+                    controls=[
+                        eyebrow_pill,
+                        ft.Container(height=Spacing.sm),
+                        ft.Text(title, style=display_style(theme, size=30)),
+                        *(
+                            [ft.Text(subtitle, style=text_style(theme, size=14))]
+                            if subtitle else []
+                        ),
+                    ],
+                    spacing=4, tight=True,
+                ),
+                ft.Container(expand=1),
+                *( [trailing] if trailing else [] ),
+            ],
+            vertical_alignment=ft.CrossAxisAlignment.START,
+        )
+
     eyebrow_pill = ft.Container(
         content=ft.Row(
             controls=[

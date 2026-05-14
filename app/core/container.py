@@ -87,6 +87,12 @@ class Container:
         return AuthenticationService(self.user_repository)
 
     @cached_property
+    def google_auth_service(self):
+        from app.services.google_auth_service import GoogleAuthService
+
+        return GoogleAuthService()
+
+    @cached_property
     def confidence_score_service(self) -> ConfidenceScoreService:
         return ConfidenceScoreService()
 

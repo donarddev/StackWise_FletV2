@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import flet as ft
+from app.utils.constants import Routes
 
 from app.controllers.base_controller import BaseController
 from app.requests.login_request import LoginRequest
@@ -12,6 +13,7 @@ from ui.components.toast import show_toast
 from ui.pages.login_page import build_login_form
 from ui.pages.public_landing_page import build_public_landing_page
 from ui.pages.register_page import build_register_form
+from app.services.google_auth_service import GoogleAuthError
 
 
 class PublicController(BaseController):
@@ -71,8 +73,17 @@ class PublicController(BaseController):
             finally:
                 self._set_busy(progress_ref, submit_ref, False)
 
+        def on_google(_e: ft.ControlEvent) -> None:
+            try:
+                url = self.container.google_auth_service.build_authorization_url()
+            except GoogleAuthError as exc:
+                show_toast(self.page, str(exc), kind="error")
+                return
+            self.page.launch_url(url)
+
         form = build_login_form(
             on_login=on_login,
+            on_google=on_google,
             on_go_register=lambda _e: self._show_dialog(self._build_register_dialog()),
             error_container_ref=error_container_ref,
             error_text_ref=error_text_ref,
@@ -80,7 +91,11 @@ class PublicController(BaseController):
             submit_ref=submit_ref,
             fields=fields,
         )
-        return auth_modal(form=form, on_close=lambda _e: self._close_dialog())
+        return auth_modal(
+            form=form,
+            on_close=lambda _e: self._close_dialog(),
+            max_height=self._modal_max_height(),
+        )
 
     def _build_register_dialog(self) -> ft.AlertDialog:
         error_container_ref = ft.Ref[ft.Container]()
@@ -122,8 +137,17 @@ class PublicController(BaseController):
             finally:
                 self._set_busy(progress_ref, submit_ref, False)
 
+        def on_google(_e: ft.ControlEvent) -> None:
+            try:
+                url = self.container.google_auth_service.build_authorization_url()
+            except GoogleAuthError as exc:
+                show_toast(self.page, str(exc), kind="error")
+                return
+            self.page.launch_url(url)
+
         form = build_register_form(
             on_register=on_register,
+            on_google=on_google,
             on_go_login=lambda _e: self._show_dialog(self._build_login_dialog()),
             error_container_ref=error_container_ref,
             error_text_ref=error_text_ref,
@@ -131,7 +155,11 @@ class PublicController(BaseController):
             submit_ref=submit_ref,
             fields=fields,
         )
-        return auth_modal(form=form, on_close=lambda _e: self._close_dialog())
+        return auth_modal(
+            form=form,
+            on_close=lambda _e: self._close_dialog(),
+            max_height=self._modal_max_height(),
+        )
 
     def _show_dialog(self, dialog: ft.AlertDialog) -> None:
         self.page.dialog = dialog
@@ -178,3 +206,8 @@ class PublicController(BaseController):
             submit.on_click = handler
             submit.opacity = 1.0
         submit.update()
+
+    def _modal_max_height(self) -> int:
+        """Keep auth dialogs compact with internal scroll for overflow."""
+        viewport_height = self.page.window.height or self.page.height or 780
+        return max(520, min(760, int(viewport_height * 0.84)))

@@ -55,7 +55,7 @@ class ExplanationService:
     ) -> str:
         return (
             f"For your {request.complexity.lower()} {request.project_type.lower()} "
-            f"targeting {request.platform}, with a {request.team_size.lower()} team and a "
+            f"targeting {request.preferred_platform}, with a team of {request.team_size} and a "
             f"{request.timeline.lower()} timeline, StackWise recommends "
             f"{lang.name} + {fw.name}, delivered using {sdlc.name}. "
             f"This combination scored highest against your scalability, security, and experience "
@@ -94,17 +94,17 @@ class ExplanationService:
         sdlc: "ScoredCandidate",
     ) -> list[str]:
         notes: list[str] = []
-        if request.experience == "Beginner":
+        if request.development_experience == "Beginner":
             notes.append(
                 f"{lang.name} was tuned for accessibility — but plan a learning ramp for any "
                 f"production deployment (CI/CD, observability, security)."
             )
-        if request.scalability in {"High", "Massive"}:
+        if request.scalability_needs in {"Large user base", "Expected to grow fast"}:
             notes.append(
                 "At your scalability target, invest in caching, async I/O, and a horizontal "
                 "deployment story (containers + orchestration) early."
             )
-        if request.security in {"High", "Critical"}:
+        if request.security_requirements in {"High", "Sensitive user data", "Payment or financial data"}:
             notes.append(
                 "Pair the framework's defaults with a dedicated threat model, dependency "
                 "scanning, and secrets management — defaults alone aren't enough at this tier."
@@ -114,7 +114,7 @@ class ExplanationService:
                 f"With a sub-month timeline, lean on {fw.name}'s built-ins; resist custom "
                 f"infra. Ship the boring path first."
             )
-        if request.team_size in {"Solo (1)", "Small (2–4)"} and sdlc.name in {"Waterfall", "Spiral"}:
+        if request.team_size.isdigit() and int(request.team_size) <= 4 and sdlc.name in {"Waterfall", "Spiral"}:
             notes.append(
                 f"{sdlc.name} can feel heavy for a small team — keep ceremonies minimal and "
                 f"focus on the planning artifacts that actually inform decisions."

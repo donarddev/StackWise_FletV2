@@ -12,6 +12,7 @@ from typing import Optional
 import flet as ft
 
 from app.models.user import User
+from ui.theme import hydrate_theme_after_login
 
 _USER_ID_KEY = "stackwise.session.user_id"
 
@@ -29,6 +30,10 @@ class Session:
         self.user = user
         try:
             self.page.client_storage.set(_USER_ID_KEY, user.id)
+        except Exception:
+            pass
+        try:
+            hydrate_theme_after_login(self.page, user)
         except Exception:
             pass
 
