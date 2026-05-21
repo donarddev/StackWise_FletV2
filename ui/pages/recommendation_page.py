@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Mapping
 
 import flet as ft
 
-from app.models.recommendation import Recommendation
 from app.requests.recommendation_request import (
     BUDGET_CONSTRAINTS_LEVELS,
     COMPLEXITY_LEVELS,
@@ -24,7 +23,6 @@ from app.requests.recommendation_request import (
     TIMELINES,
 )
 from ui.components.dashboard.glass_tokens import dashboard_glass_tokens
-from ui.components.empty_state import empty_state
 from ui.components.glass_card import glass_card
 from ui.components.input_field import input_field
 from ui.components.page_header import page_header
@@ -33,9 +31,6 @@ from ui.components.section_header import section_header
 from ui.components.select_field import select_field
 from ui.themes.app_theme import Radii, Spacing
 from ui.theme import caption_style, heading_style, subheading_style, text_style
-from ui.widgets.recommendation_card import recommendation_result_card
-
-
 def recommendation_workspace_theme(theme: Mapping[str, Any]) -> dict[str, Any]:
     """Dark-workspace tokens aligned with dashboard glass (navy cards, cyan accents).
 
@@ -136,12 +131,10 @@ def build_recommendation_page(
     fields: RecommendationFormFields,
     error_text_ref: ft.Ref[ft.Text],
     submitting_ref: ft.Ref[ft.ProgressRing],
-    result_panel_ref: ft.Ref[ft.Column],
     on_generate: Callable[[ft.ControlEvent], None],
     on_reset: Callable[[ft.ControlEvent], None],
     on_back: Callable[[ft.ControlEvent], None],
     theme: Mapping[str, Any],
-    initial_recommendation: Optional[Recommendation] = None,
 ) -> ft.Control:
     error_text = ft.Text(
         "", size=12.5, color=theme["danger"], ref=error_text_ref, visible=False,
@@ -332,28 +325,9 @@ def build_recommendation_page(
         controls=[profile_card, context_card, preference_card, generate_card],
     )
 
-    initial_panel = (
-        recommendation_result_card(initial_recommendation, theme=theme)
-        if initial_recommendation
-        else empty_state(
-            icon=ft.icons.SCIENCE_OUTLINED,
-            title="Awaiting your project profile",
-            description=(
-                "Fill out the form on the left. StackWise will analyze it across nine dimensions "
-                "and return an explainable recommendation in under a second."
-            ),
-            theme=theme,
-        )
-    )
-
-    result_column = ft.Column(
-        controls=[initial_panel],
-        spacing=Spacing.lg,
-        ref=result_panel_ref,
-    )
-
     explainer_card = _guidance_card(theme)
     submit_note = _submit_note_card(theme)
+    awaiting_card = _awaiting_profile_card(theme)
 
     page_body = ft.ResponsiveRow(
         spacing=Spacing.lg, run_spacing=Spacing.lg,
@@ -363,7 +337,7 @@ def build_recommendation_page(
                 col={"xs": 12, "lg": 4},
                 content=ft.Column(
                     spacing=Spacing.md,
-                    controls=[explainer_card, submit_note, result_column],
+                    controls=[explainer_card, submit_note, awaiting_card],
                 ),
             ),
         ],
@@ -432,6 +406,24 @@ def _guidance_card(theme: Mapping[str, Any]) -> ft.Control:
     )
 
 
+def _awaiting_profile_card(theme: Mapping[str, Any]) -> ft.Control:
+    return glass_card(
+        ft.Column(
+            spacing=Spacing.sm,
+            controls=[
+                ft.Icon(ft.icons.SCIENCE_OUTLINED, size=28, color=theme["accent_2"]),
+                ft.Text("Awaiting your project profile", style=subheading_style(theme, size=15)),
+                ft.Text(
+                    "Fill out the form on the left. After you generate, StackWise opens your "
+                    "full decision report on a dedicated page — not squeezed into this sidebar.",
+                    style=text_style(theme, size=12.5),
+                ),
+            ],
+        ),
+        theme=theme,
+    )
+
+
 def _submit_note_card(theme: Mapping[str, Any]) -> ft.Control:
     return glass_card(
         ft.Column(
@@ -439,7 +431,7 @@ def _submit_note_card(theme: Mapping[str, Any]) -> ft.Control:
             controls=[
                 ft.Text("Before you submit", style=subheading_style(theme, size=15)),
                 ft.Text(
-                    "StackWise AI will store the recommendation, show the result, and keep the report available for future review.",
+                    "StackWise AI will store the recommendation and open your full decision report on a dedicated page.",
                     style=text_style(theme, size=12.5),
                 ),
             ],

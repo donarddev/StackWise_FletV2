@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.repositories.analytics_repository import AnalyticsRepository
+    from app.repositories.feedback_repository import FeedbackRepository
     from app.repositories.recommendation_repository import RecommendationRepository
 
 
@@ -28,9 +29,11 @@ class AnalyticsService:
         self,
         recommendation_repository: "RecommendationRepository",
         analytics_repository: "AnalyticsRepository",
+        feedback_repository: "FeedbackRepository | None" = None,
     ) -> None:
         self.recommendations = recommendation_repository
         self.analytics = analytics_repository
+        self.feedback = feedback_repository
 
     def snapshot_for_user(self, user_id: int) -> DashboardSnapshot:
         total = self.recommendations.count_for_user(user_id)
@@ -41,6 +44,12 @@ class AnalyticsService:
         trend = self.recommendations.trend_by_week(user_id, weeks=8)
         insights = self._build_insights(total, avg, top_languages, top_frameworks)
 
+        total_feedback = 0
+        average_rating = 0.0
+        if self.feedback is not None:
+            total_feedback = self.feedback.count_for_user(user_id)
+            average_rating = round(self.feedback.average_rating_for_user(user_id), 1)
+
         return DashboardSnapshot(
             total_recommendations=total,
             average_confidence=round(avg, 1),
@@ -49,6 +58,8 @@ class AnalyticsService:
             top_sdlc=top_sdlc,
             weekly_trend=trend,
             insights=insights,
+            total_feedback=total_feedback,
+            average_rating=average_rating,
         )
 
     @staticmethod

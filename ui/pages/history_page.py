@@ -23,6 +23,7 @@ from ui.theme import card_box_shadow, display_style, text_style
 from ui.widgets.history_table import history_table
 
 HistoryFilterKey = Literal["all", "high", "moderate", "low", "recent"]
+HistoryTabKey = Literal["active", "deleted"]
 
 
 def history_workspace_theme(theme: Mapping[str, Any]) -> dict[str, Any]:
@@ -335,6 +336,63 @@ def _filter_chip(
     )
 
 
+def _trash_tab_chip(
+    label: str,
+    key: HistoryTabKey,
+    *,
+    theme: Mapping[str, Any],
+    active: HistoryTabKey,
+    on_select: Callable[[HistoryTabKey], None],
+) -> ft.Control:
+    selected = active == key
+    teal = theme["accent_2"]
+    if selected:
+        border_c = ft.colors.with_opacity(0.42, teal)
+        bg = ft.colors.with_opacity(0.14, teal)
+        fg = theme["text"]
+    else:
+        border_c = theme["border_strong"]
+        bg = ft.colors.with_opacity(0.45, theme["surface"])
+        fg = theme["text_secondary"]
+
+    def _tap(_: ft.ControlEvent) -> None:
+        on_select(key)
+
+    return ft.Container(
+        content=ft.Text(label, size=13, weight=ft.FontWeight.W_600, color=fg),
+        padding=ft.padding.symmetric(horizontal=16, vertical=8),
+        border_radius=Radii.pill,
+        border=ft.border.all(1, border_c),
+        bgcolor=bg,
+        ink=True,
+        on_click=_tap,
+    )
+
+
+def build_trash_tabs_row(
+    *,
+    theme: Mapping[str, Any],
+    active: HistoryTabKey,
+    on_tab: Callable[[HistoryTabKey], None],
+) -> ft.Control:
+    return ft.Row(
+        spacing=10,
+        wrap=True,
+        run_spacing=10,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        controls=[
+            _trash_tab_chip("Active", "active", theme=theme, active=active, on_select=on_tab),
+            _trash_tab_chip(
+                "Recently Deleted",
+                "deleted",
+                theme=theme,
+                active=active,
+                on_select=on_tab,
+            ),
+        ],
+    )
+
+
 def build_filters_row(
     *,
     theme: Mapping[str, Any],
@@ -387,10 +445,12 @@ def render_history_body(
     selected_ids: set[int],
     search_query: str,
     active_filter: HistoryFilterKey,
+    history_tab: HistoryTabKey,
     on_view: Callable[[Recommendation], None],
     on_regenerate: Callable[[Recommendation], None],
     on_compare_select: Callable[[Recommendation, bool], None],
-    on_delete: Callable[[Recommendation], None],
+    on_delete: Optional[Callable[[Recommendation], None]],
+    on_restore: Optional[Callable[[Recommendation], None]],
     on_new_recommendation: Callable[[ft.ControlEvent], None],
     error_message: Optional[str] = None,
     on_retry_load: Optional[Callable[[ft.ControlEvent], None]] = None,
@@ -420,20 +480,28 @@ def render_history_body(
     filtered_empty = not items and (q or active_filter != "all")
 
     if not items and not filtered_empty:
-        inner = empty_state(
-            icon=ft.icons.HISTORY_OUTLINED,
-            title="No recommendations yet",
-            description="Generate your first recommendation to start building your decision history.",
-            action=primary_button(
-                "New recommendation",
-                on_click=on_new_recommendation,
-                icon=ft.icons.AUTO_AWESOME,
+        if history_tab == "deleted":
+            inner = empty_state(
+                icon=ft.icons.DELETE_OUTLINE,
+                title="No deleted recommendations",
+                description="Recommendations you move to trash will appear here so you can restore them.",
                 theme=theme,
-                mint_fill=True,
-                border_radius=Radii.pill,
-            ),
-            theme=theme,
-        )
+            )
+        else:
+            inner = empty_state(
+                icon=ft.icons.HISTORY_OUTLINED,
+                title="No active recommendations yet",
+                description="Generate your first recommendation to start building your decision history.",
+                action=primary_button(
+                    "New recommendation",
+                    on_click=on_new_recommendation,
+                    icon=ft.icons.AUTO_AWESOME,
+                    theme=theme,
+                    mint_fill=True,
+                    border_radius=Radii.pill,
+                ),
+                theme=theme,
+            )
         return glass_card(
             ft.Container(content=inner, padding=Spacing.lg),
             padding=0,
@@ -446,13 +514,16 @@ def render_history_body(
             description="Try adjusting search or filters, or clear filters to see all records.",
             theme=theme,
         )
+    list_mode: Literal["active", "deleted"] = "deleted" if history_tab == "deleted" else "active"
     return history_table(
         items,
         theme=theme,
+        list_mode=list_mode,
         on_view=on_view,
         on_regenerate=on_regenerate,
         on_compare_select=on_compare_select,
-        on_delete=on_delete,
+        on_delete=on_delete if history_tab == "active" else None,
+        on_restore=on_restore if history_tab == "deleted" else None,
         selected_ids=selected_ids,
     )
 
@@ -464,14 +535,17 @@ def build_history_page(
     selected_ids: set[int],
     stats: HistoryStatsSnapshot,
     active_filter: HistoryFilterKey,
+    history_tab: HistoryTabKey,
     search_field: ft.TextField,
     on_search_change: Callable[[str], None],
     on_filter: Callable[[HistoryFilterKey], None],
     on_clear_filters: Callable[[ft.ControlEvent], None],
+    on_tab_change: Callable[[HistoryTabKey], None],
     on_view: Callable[[Recommendation], None],
     on_regenerate: Callable[[Recommendation], None],
     on_compare_select: Callable[[Recommendation, bool], None],
-    on_delete: Callable[[Recommendation], None],
+    on_delete: Optional[Callable[[Recommendation], None]],
+    on_restore: Optional[Callable[[Recommendation], None]],
     on_compare: Callable[[ft.ControlEvent], None],
     on_new_recommendation: Callable[[ft.ControlEvent], None],
     body_ref: Optional[ft.Ref[ft.Container]] = None,
@@ -479,8 +553,13 @@ def build_history_page(
     compare_hint_ref: Optional[ft.Ref[ft.Text]] = None,
     stats_ref: Optional[ft.Ref[ft.Container]] = None,
     filters_ref: Optional[ft.Ref[ft.Container]] = None,
+    tabs_ref: Optional[ft.Ref[ft.Container]] = None,
 ) -> ft.Control:
-    search_field.on_change = lambda _e: on_search_change(search_field.value or "")
+    def _search_changed(_e: ft.ControlEvent) -> None:
+        on_search_change(search_field.value or "")
+
+    search_field.on_change = _search_changed
+    search_field.on_submit = _search_changed
     search_field.dense = True
     search_field.content_padding = ft.padding.symmetric(horizontal=14, vertical=14)
 
@@ -511,10 +590,11 @@ def build_history_page(
         border_radius=Radii.pill,
     )
 
+    show_compare = history_tab == "active"
     n_sel = len(selected_ids)
     _hint_kw = {
         "value": "Select two records to compare." if n_sel != 2 else "",
-        "visible": n_sel != 2,
+        "visible": show_compare and n_sel != 2,
         "size": 12,
         "color": theme["text_muted"],
         "text_align": ft.TextAlign.RIGHT,
@@ -525,6 +605,7 @@ def build_history_page(
     else:
         compare_hint = ft.Text(**_hint_kw)
 
+    compare_btn.visible = show_compare
     header = _history_header(
         theme=theme,
         compare_btn=compare_btn,
@@ -533,9 +614,7 @@ def build_history_page(
     )
 
     stats_row = build_stats_row(stats, theme)
-    stats_host = ft.Container(content=stats_row)
-    if stats_ref is not None:
-        stats_host.ref = stats_ref
+    stats_host = ft.Container(ref=stats_ref, content=stats_row)
 
     show_clear = bool((search_field.value or "").strip()) or active_filter != "all"
     filters_inner = build_filters_row(
@@ -545,9 +624,10 @@ def build_history_page(
         show_clear=show_clear,
         on_clear=on_clear_filters,
     )
-    filters_host = ft.Container(content=filters_inner)
-    if filters_ref is not None:
-        filters_host.ref = filters_ref
+    filters_host = ft.Container(ref=filters_ref, content=filters_inner)
+
+    trash_tabs = build_trash_tabs_row(theme=theme, active=history_tab, on_tab=on_tab_change)
+    tabs_host = ft.Container(ref=tabs_ref, content=trash_tabs)
 
     body = render_history_body(
         theme=theme,
@@ -555,17 +635,17 @@ def build_history_page(
         selected_ids=selected_ids,
         search_query=search_field.value or "",
         active_filter=active_filter,
+        history_tab=history_tab,
         on_view=on_view,
         on_regenerate=on_regenerate,
         on_compare_select=on_compare_select,
         on_delete=on_delete,
+        on_restore=on_restore,
         on_new_recommendation=on_new_recommendation,
         error_message=None,
         on_retry_load=None,
     )
-    body_container = ft.Container(content=body)
-    if body_ref is not None:
-        body_container.ref = body_ref
+    body_container = ft.Container(ref=body_ref, content=body)
 
     search_block = glass_card(
         ft.Column(
@@ -586,12 +666,14 @@ def build_history_page(
         controls=[
             header,
             stats_host,
+            tabs_host,
             search_block,
             body_container,
         ],
     )
 
-    apply_compare_button_state(compare_btn, selected_ids, on_compare)
+    if show_compare:
+        apply_compare_button_state(compare_btn, selected_ids, on_compare)
 
     return _history_surface(theme, inner_column)
 

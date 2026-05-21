@@ -15,6 +15,7 @@ class Routes:
     REGISTER = "/register"
     DASHBOARD = "/dashboard"
     RECOMMENDATION = "/recommendation"
+    RECOMMENDATION_RESULT = "/recommendation-result"
     HISTORY = "/history"
     CHATBOT = "/chatbot"
     LEARNING = "/learning"
@@ -84,6 +85,12 @@ PLATFORMS: list[str] = [
 ]
 
 
+# ---------- Recommendation session (Phase 3 — pre-DB result handoff) ----------
+
+SESSION_RECOMMENDATION_INPUT = "latest_recommendation_input"
+SESSION_RECOMMENDATION_RESULT = "latest_recommendation_result"
+SESSION_SELECTED_RECOMMENDATION_ID = "selected_recommendation_id"
+
 # ---------- Recommendation engine ----------
 
 CONFIDENCE_LEVELS: dict[str, tuple[int, int]] = {
@@ -92,6 +99,11 @@ CONFIDENCE_LEVELS: dict[str, tuple[int, int]] = {
     "High": (70, 84),
     "Very High": (85, 100),
 }
+
+
+def recommendation_result_route(recommendation_id: int) -> str:
+    """Canonical URL for a saved recommendation decision report."""
+    return f"{Routes.RECOMMENDATION_RESULT}/{recommendation_id}"
 
 
 def confidence_label(score: int) -> str:

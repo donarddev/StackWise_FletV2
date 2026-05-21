@@ -48,9 +48,9 @@ class RecommendationRepository(BaseRepository):
                 result["recommended_framework"],
                 result["recommended_sdlc"],
                 int(result["confidence_score"]),
-                json.dumps(result.get("explanation", {})),
-                json.dumps(result.get("alternatives", {})),
-                json.dumps(request),
+                json.dumps(result.get("explanation", {}), ensure_ascii=False),
+                json.dumps(result.get("alternatives", {}), ensure_ascii=False),
+                json.dumps(request, ensure_ascii=False),
             ),
         )
         self.add_history(user_id, new_id, "created")
@@ -63,20 +63,33 @@ class RecommendationRepository(BaseRepository):
         )
         return Recommendation.from_row_optional(row)
 
-    def list_for_user(self, user_id: int, limit: int = 100) -> list[Recommendation]:
+    def list_active_for_user(self, user_id: int, limit: int = 100) -> list[Recommendation]:
         rows = self.db.fetch_all(
-            "SELECT * FROM recommendations WHERE user_id = %s "
+            "SELECT * FROM recommendations WHERE user_id = %s AND deleted_at IS NULL "
             "ORDER BY created_at DESC LIMIT %s",
             (user_id, int(limit)),
         )
         return [Recommendation.from_row(r) for r in rows]
 
+    def list_deleted_for_user(self, user_id: int, limit: int = 100) -> list[Recommendation]:
+        rows = self.db.fetch_all(
+            "SELECT * FROM recommendations WHERE user_id = %s AND deleted_at IS NOT NULL "
+            "ORDER BY deleted_at DESC LIMIT %s",
+            (user_id, int(limit)),
+        )
+        return [Recommendation.from_row(r) for r in rows]
+
+    def list_for_user(self, user_id: int, limit: int = 100) -> list[Recommendation]:
+        """Active recommendations only (excludes soft-deleted rows)."""
+        return self.list_active_for_user(user_id, limit=limit)
+
     def latest_for_user(self, user_id: int, limit: int = 5) -> list[Recommendation]:
-        return self.list_for_user(user_id, limit=limit)
+        return self.list_active_for_user(user_id, limit=limit)
 
     def count_for_user(self, user_id: int) -> int:
         row = self.db.fetch_one(
-            "SELECT COUNT(*) AS c FROM recommendations WHERE user_id = %s",
+            "SELECT COUNT(*) AS c FROM recommendations "
+            "WHERE user_id = %s AND deleted_at IS NULL",
             (user_id,),
         )
         return int(row["c"]) if row else 0
@@ -84,7 +97,7 @@ class RecommendationRepository(BaseRepository):
     def average_confidence(self, user_id: int) -> float:
         row = self.db.fetch_one(
             "SELECT AVG(confidence_score) AS avg_score "
-            "FROM recommendations WHERE user_id = %s",
+            "FROM recommendations WHERE user_id = %s AND deleted_at IS NULL",
             (user_id,),
         )
         return float((row or {}).get("avg_score") or 0.0)
@@ -93,7 +106,7 @@ class RecommendationRepository(BaseRepository):
         rows = self.db.fetch_all(
             """
             SELECT recommended_language AS name, COUNT(*) AS c
-            FROM recommendations WHERE user_id = %s
+            FROM recommendations WHERE user_id = %s AND deleted_at IS NULL
             GROUP BY recommended_language
             ORDER BY c DESC, name ASC LIMIT %s
             """,
@@ -105,7 +118,7 @@ class RecommendationRepository(BaseRepository):
         rows = self.db.fetch_all(
             """
             SELECT recommended_framework AS name, COUNT(*) AS c
-            FROM recommendations WHERE user_id = %s
+            FROM recommendations WHERE user_id = %s AND deleted_at IS NULL
             GROUP BY recommended_framework
             ORDER BY c DESC, name ASC LIMIT %s
             """,
@@ -117,7 +130,7 @@ class RecommendationRepository(BaseRepository):
         rows = self.db.fetch_all(
             """
             SELECT recommended_sdlc AS name, COUNT(*) AS c
-            FROM recommendations WHERE user_id = %s
+            FROM recommendations WHERE user_id = %s AND deleted_at IS NULL
             GROUP BY recommended_sdlc
             ORDER BY c DESC, name ASC LIMIT %s
             """,
@@ -134,7 +147,7 @@ class RecommendationRepository(BaseRepository):
         rows = self.db.fetch_all(
             """
             SELECT DATE_FORMAT(created_at, '%%Y-%%u') AS bucket, COUNT(*) AS c
-            FROM recommendations WHERE user_id = %s
+            FROM recommendations WHERE user_id = %s AND deleted_at IS NULL
             GROUP BY bucket
             ORDER BY bucket DESC LIMIT %s
             """,
@@ -151,7 +164,42 @@ class RecommendationRepository(BaseRepository):
             (user_id, recommendation_id, action),
         )
 
+    def soft_delete(self, rec_id: int, user_id: int) -> bool:
+        """Mark a recommendation as deleted (does not remove the row)."""
+        self.db.execute(
+            """
+            UPDATE recommendations
+            SET deleted_at = CURRENT_TIMESTAMP
+            WHERE id = %s AND user_id = %s AND deleted_at IS NULL
+            """,
+            (rec_id, user_id),
+        )
+        row = self.db.fetch_one(
+            "SELECT id FROM recommendations "
+            "WHERE id = %s AND user_id = %s AND deleted_at IS NOT NULL LIMIT 1",
+            (rec_id, user_id),
+        )
+        return row is not None
+
+    def restore(self, rec_id: int, user_id: int) -> bool:
+        """Clear deleted_at so the recommendation appears in History/Dashboard again."""
+        self.db.execute(
+            """
+            UPDATE recommendations
+            SET deleted_at = NULL
+            WHERE id = %s AND user_id = %s AND deleted_at IS NOT NULL
+            """,
+            (rec_id, user_id),
+        )
+        row = self.db.fetch_one(
+            "SELECT id FROM recommendations "
+            "WHERE id = %s AND user_id = %s AND deleted_at IS NULL LIMIT 1",
+            (rec_id, user_id),
+        )
+        return row is not None
+
     def delete(self, rec_id: int, user_id: int) -> None:
+        """Legacy hard delete — prefer soft_delete."""
         self.db.execute(
             "DELETE FROM recommendations WHERE id = %s AND user_id = %s",
             (rec_id, user_id),

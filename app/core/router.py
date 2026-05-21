@@ -19,6 +19,7 @@ from app.controllers.history_controller import HistoryController
 from app.controllers.learning_controller import LearningController
 from app.controllers.public_controller import PublicController
 from app.controllers.recommendation_controller import RecommendationController
+from app.controllers.recommendation_result_controller import RecommendationResultController
 from app.controllers.settings_controller import SettingsController
 from app.core.container import Container
 from app.utils.constants import Routes
@@ -46,6 +47,7 @@ class Router:
         self.public_controller = PublicController(page, container)
         self.dashboard_controller = DashboardController(page, container)
         self.recommendation_controller = RecommendationController(page, container)
+        self.recommendation_result_controller = RecommendationResultController(page, container)
         self.history_controller = HistoryController(page, container)
         self.chatbot_controller = ChatbotController(page, container)
         self.learning_controller = LearningController(page, container)
@@ -57,6 +59,9 @@ class Router:
             Routes.REGISTER: RouteResolution(self.auth_controller.build_register, False),
             Routes.DASHBOARD: RouteResolution(self.dashboard_controller.build, True),
             Routes.RECOMMENDATION: RouteResolution(self.recommendation_controller.build, True),
+            Routes.RECOMMENDATION_RESULT: RouteResolution(
+                self.recommendation_result_controller.build, True
+            ),
             Routes.HISTORY: RouteResolution(self.history_controller.build, True),
             Routes.CHATBOT: RouteResolution(self.chatbot_controller.build, True),
             Routes.LEARNING: RouteResolution(self.learning_controller.build, True),
@@ -96,7 +101,7 @@ class Router:
                 log.exception("Error handling OAuth callback")
             return
 
-        resolution = self._routes.get(target)
+        resolution = self._resolve(target)
 
         if resolution is None:
             log.warning("Unknown route '%s', redirecting to dashboard.", target)
@@ -128,7 +133,7 @@ class Router:
         parsed = urlparse(target)
         if parsed.path == Routes.OAUTH_CALLBACK:
             return
-        resolution = self._routes.get(target)
+        resolution = self._resolve(target)
         if resolution is None:
             return
         if resolution.requires_auth and not self.container.session.is_authenticated:
@@ -145,6 +150,19 @@ class Router:
         self.page.views.clear()
         self.page.views.append(view)
         self.page.update()
+
+    def _resolve(self, target: str) -> Optional[RouteResolution]:
+        parsed = urlparse(target)
+        path = parsed.path or target
+
+        resolution = self._routes.get(path)
+        if resolution is not None:
+            return resolution
+
+        if path.startswith(f"{Routes.RECOMMENDATION_RESULT}/"):
+            return RouteResolution(self.recommendation_result_controller.build, True)
+
+        return None
 
     def _on_view_pop(self, e: ft.ViewPopEvent) -> None:
         if len(self.page.views) <= 1:

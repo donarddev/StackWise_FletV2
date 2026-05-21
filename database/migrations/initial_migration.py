@@ -195,3 +195,47 @@ def run_migrations(db: "DatabaseService") -> None:
             )
         db.execute("INSERT INTO schema_version (version) VALUES (%s)", (4,))
         log.info("Applied migration v4 (users.theme_mode).")
+
+    # Migration v5: recommendation feedback (ratings on saved reports)
+    if current < 5:
+        db.script(
+            """
+            CREATE TABLE IF NOT EXISTS recommendation_feedback (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                recommendation_id INT NOT NULL,
+                user_id INT NOT NULL,
+                rating INT NOT NULL,
+                comment TEXT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_feedback_user (user_id, created_at),
+                INDEX idx_feedback_rec (recommendation_id),
+                UNIQUE KEY uq_feedback_user_rec (user_id, recommendation_id),
+                CONSTRAINT fk_feedback_user FOREIGN KEY (user_id)
+                    REFERENCES users(id) ON DELETE CASCADE,
+                CONSTRAINT fk_feedback_rec FOREIGN KEY (recommendation_id)
+                    REFERENCES recommendations(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """
+        )
+        db.execute("INSERT INTO schema_version (version) VALUES (%s)", (5,))
+        log.info("Applied migration v5 (recommendation_feedback).")
+
+    # Migration v6: soft-delete support on recommendations
+    if current < 6:
+        schema = db._config.database
+        row = db.fetch_one(
+            "SELECT COUNT(*) AS c FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s",
+            (schema, "recommendations", "deleted_at"),
+        )
+        if not row or int(row.get("c", 0)) == 0:
+            db.execute(
+                "ALTER TABLE recommendations ADD COLUMN deleted_at DATETIME NULL "
+                "DEFAULT NULL AFTER created_at"
+            )
+            db.execute(
+                "CREATE INDEX idx_recommendations_user_active "
+                "ON recommendations (user_id, deleted_at, created_at)"
+            )
+        db.execute("INSERT INTO schema_version (version) VALUES (%s)", (6,))
+        log.info("Applied migration v6 (recommendations.deleted_at).")

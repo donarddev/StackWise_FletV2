@@ -19,6 +19,7 @@ from app.core.session import Session
 from app.repositories.analytics_repository import AnalyticsRepository
 from app.repositories.chatbot_log_repository import ChatbotLogRepository
 from app.repositories.learning_repository import LearningRepository
+from app.repositories.feedback_repository import FeedbackRepository
 from app.repositories.recommendation_repository import RecommendationRepository
 from app.repositories.user_repository import UserRepository
 from app.services.alternative_recommendation_service import AlternativeRecommendationService
@@ -28,7 +29,10 @@ from app.services.chatbot_service import ChatbotService
 from app.services.confidence_score_service import ConfidenceScoreService
 from app.services.database_service import DatabaseService
 from app.services.explanation_service import ExplanationService
-from app.services.recommendation_service import RecommendationService
+from app.services.feedback_service import FeedbackService
+from app.services.recommendation_history_service import RecommendationHistoryService
+from app.services.recommendation_orchestrator_service import RecommendationOrchestratorService
+from app.services.recommendation_persistence_service import RecommendationPersistenceService
 
 
 @dataclass
@@ -67,6 +71,10 @@ class Container:
     @cached_property
     def recommendation_repository(self) -> RecommendationRepository:
         return RecommendationRepository(self.database)
+
+    @cached_property
+    def feedback_repository(self) -> FeedbackRepository:
+        return FeedbackRepository(self.database)
 
     @cached_property
     def analytics_repository(self) -> AnalyticsRepository:
@@ -109,8 +117,23 @@ class Container:
         return ChatbotService(self.ai_config, self.chatbot_log_repository)
 
     @cached_property
-    def recommendation_service(self) -> RecommendationService:
-        return RecommendationService(
+    def recommendation_persistence(self) -> RecommendationPersistenceService:
+        return RecommendationPersistenceService(self.recommendation_repository)
+
+    @cached_property
+    def feedback_service(self) -> FeedbackService:
+        return FeedbackService(
+            self.feedback_repository,
+            self.recommendation_repository,
+        )
+
+    @cached_property
+    def recommendation_history_service(self) -> RecommendationHistoryService:
+        return RecommendationHistoryService(self.recommendation_repository)
+
+    @cached_property
+    def recommendation_service(self) -> RecommendationOrchestratorService:
+        return RecommendationOrchestratorService(
             recommendation_repository=self.recommendation_repository,
             confidence_score_service=self.confidence_score_service,
             alternative_service=self.alternative_recommendation_service,
@@ -123,4 +146,5 @@ class Container:
         return AnalyticsService(
             recommendation_repository=self.recommendation_repository,
             analytics_repository=self.analytics_repository,
+            feedback_repository=self.feedback_repository,
         )

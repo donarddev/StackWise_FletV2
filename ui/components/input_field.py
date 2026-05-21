@@ -24,9 +24,11 @@ def input_field(
     autofocus: bool = False,
     text_size: int = 14,
     theme: Optional[Mapping[str, Any]] = None,
+    ref: Optional[ft.Ref[ft.TextField]] = None,
 ) -> ft.TextField:
     if theme is not None:
         return ft.TextField(
+            ref=ref,
             label=label,
             value=value,
             hint_text=hint,
@@ -53,6 +55,7 @@ def input_field(
             content_padding=ft.padding.symmetric(horizontal=14, vertical=14),
         )
     return ft.TextField(
+        ref=ref,
         label=label,
         value=value,
         hint_text=hint,

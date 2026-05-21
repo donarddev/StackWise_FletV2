@@ -37,6 +37,11 @@ class Recommendation:
     project_profile: dict = field(default_factory=dict)
 
     created_at: datetime = field(default_factory=datetime.now)
+    deleted_at: Optional[datetime] = None
+
+    @property
+    def is_deleted(self) -> bool:
+        return self.deleted_at is not None
 
     @staticmethod
     def from_row(row: Mapping[str, Any]) -> "Recommendation":
@@ -61,6 +66,11 @@ class Recommendation:
             alternatives=json.loads(row["alternatives_json"] or "{}"),
             project_profile=json.loads(row.get("project_profile_json") or "{}"),
             created_at=from_db(row["created_at"]),
+            deleted_at=(
+                from_db(row["deleted_at"])
+                if row.get("deleted_at") is not None
+                else None
+            ),
         )
 
     @staticmethod

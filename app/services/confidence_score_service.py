@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.requests.recommendation_request import RecommendationRequest
-    from app.services.recommendation_service import ScoredCandidate
+    from app.services.recommendation_orchestrator_service import ScoredCandidate
 
 
 class ConfidenceScoreService:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import flet as ft
 
-from app.utils.constants import Routes
+from app.utils.constants import Routes, recommendation_result_route
 
 
 class NavigationService:
@@ -33,6 +33,9 @@ class NavigationService:
 
     def to_recommendation(self) -> None:
         self.page.go(Routes.RECOMMENDATION)
+
+    def to_recommendation_result(self, recommendation_id: int) -> None:
+        self.page.go(recommendation_result_route(recommendation_id))
 
     def to_history(self) -> None:
         self.page.go(Routes.HISTORY)

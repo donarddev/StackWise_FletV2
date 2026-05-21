@@ -30,7 +30,7 @@ from app.services.authentication_service import AuthenticationService
 from app.services.confidence_score_service import ConfidenceScoreService
 from app.services.database_service import DatabaseService
 from app.services.explanation_service import ExplanationService
-from app.services.recommendation_service import RecommendationService
+from app.services.recommendation_orchestrator_service import RecommendationOrchestratorService
 
 
 TEST_DB_NAME = os.environ.get("STACKWISE_TEST_DB", "stackwise_ai_test")
@@ -166,7 +166,7 @@ class StackWiseSmokeTests(unittest.TestCase):
             password_hash=hash_password("password"),
         )
 
-        service = RecommendationService(
+        service = RecommendationOrchestratorService(
             recommendation_repository=rec_repo,
             confidence_score_service=ConfidenceScoreService(),
             alternative_service=AlternativeRecommendationService(),
