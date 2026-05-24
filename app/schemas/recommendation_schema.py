@@ -1,14 +1,30 @@
 """Recommendation scoring schemas — request/result data structures.
 
-These dataclasses represent the Phase 1 weighted scoring engine contract.
-They are independent of Flet, the database, and the legacy form request class
-in ``app.requests.recommendation_request``.
+Phase 1 weighted scoring engine contract. Independent of Flet, database, and the
+legacy form request class in ``app.requests.recommendation_request``.
 """
 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from typing import Any
+
+_EMPTY_PREFERRED = frozenset(
+    {
+        "",
+        "none",
+        "none / not sure",
+        "not sure",
+        "null",
+    }
+)
+
+
+def _clean_preferred(value: Any) -> str:
+    text = str(value or "").strip()
+    if text.lower() in _EMPTY_PREFERRED:
+        return ""
+    return text
 
 
 @dataclass
@@ -32,6 +48,10 @@ class RecommendationRequest:
     budget_constraints: str = "Medium"
     maintenance_expectations: str = "Medium"
     deployment_preference: str = "Cloud"
+    user_preferred_language: str = ""
+    user_preferred_framework: str = ""
+    user_preferred_sdlc: str = ""
+    user_preferred_reason: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -40,7 +60,11 @@ class RecommendationRequest:
     def from_dict(cls, data: dict[str, Any]) -> RecommendationRequest:
         features = data.get("selected_features", [])
         if isinstance(features, str):
-            features = [f.strip() for f in features.replace("|", ",").split(",") if f.strip()]
+            features = [
+                f.strip() for f in features.replace("|", ",").split(",") if f.strip()
+            ]
+        elif isinstance(features, (tuple, set)):
+            features = [str(f).strip() for f in features if str(f).strip()]
         elif not isinstance(features, list):
             features = []
 
@@ -49,6 +73,23 @@ class RecommendationRequest:
             team_size = max(1, int(team_raw))
         except (TypeError, ValueError):
             team_size = 1
+
+        lang = _clean_preferred(
+            data.get("user_preferred_language")
+            or data.get("preferred_language_optional")
+        )
+        fw = _clean_preferred(
+            data.get("user_preferred_framework")
+            or data.get("preferred_framework_optional")
+        )
+        sdlc = _clean_preferred(
+            data.get("user_preferred_sdlc") or data.get("preferred_sdlc_optional")
+        )
+        reason = str(
+            data.get("user_preferred_reason")
+            or data.get("preferred_stack_reason_optional")
+            or ""
+        ).strip()
 
         return cls(
             project_name=str(data.get("project_name", "") or "").strip(),
@@ -82,12 +123,16 @@ class RecommendationRequest:
             deployment_preference=str(
                 data.get("deployment_preference", "Cloud") or "Cloud"
             ).strip(),
+            user_preferred_language=lang,
+            user_preferred_framework=fw,
+            user_preferred_sdlc=sdlc,
+            user_preferred_reason=reason,
         )
 
 
 @dataclass
 class RecommendationResult:
-    """Structured output from the weighted recommendation engine."""
+    """Structured output from the weighted recommendation engine (legacy dataclass)."""
 
     recommended_language: str = ""
     recommended_framework: str = ""

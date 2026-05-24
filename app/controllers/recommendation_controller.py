@@ -8,14 +8,15 @@ import flet as ft
 
 from app.controllers._layout_helper import wrap_with_layout
 from app.controllers.base_controller import BaseController
-from app.requests.recommendation_request import RecommendationRequest
-from app.schemas.recommendation_schema import RecommendationRequest as ScoringRequest
+from app.requests.recommendation_request import PREFERRED_STACK_NONE, RecommendationRequest
 from app.services.recommendation_service import RecommendationService
 from app.utils.constants import (
     Routes,
     SESSION_RECOMMENDATION_INPUT,
     SESSION_RECOMMENDATION_RESULT,
     SESSION_SELECTED_RECOMMENDATION_ID,
+    SESSION_SELECTED_RECOMMENDATION_INPUT,
+    SESSION_SELECTED_RECOMMENDATION_RESULT,
     recommendation_result_route,
 )
 from app.utils.logger import get_logger
@@ -80,16 +81,15 @@ class RecommendationController(BaseController):
                     )
                     return
 
-                self.page.session.set(SESSION_RECOMMENDATION_INPUT, data)
-                self.page.session.set(SESSION_RECOMMENDATION_RESULT, response["data"])
-                self.page.session.set(SESSION_SELECTED_RECOMMENDATION_ID, saved.id)
+                result = response["data"]
+                self._store_recommendation_session(data, result, saved.id)
                 self.page.go(recommendation_result_route(saved.id))
             except Exception:
                 log.exception("Generate recommendation failed")
                 self._set_error(
                     error_ref,
-                    "Unable to generate recommendation. Please review your "
-                    "project profile and try again.",
+                    "Unable to generate recommendation. Please review your inputs "
+                    "and try again.",
                 )
             finally:
                 self._set_busy(progress_ref, False)
@@ -114,10 +114,23 @@ class RecommendationController(BaseController):
                 fields.deployment_preference,
             ):
                 f.value = None if isinstance(f, ft.Dropdown) else ""
-                f.update()
+                if f.page:
+                    f.update()
+            for f in (
+                fields.preferred_language_optional,
+                fields.preferred_framework_optional,
+                fields.preferred_sdlc_optional,
+            ):
+                f.value = PREFERRED_STACK_NONE
+                if f.page:
+                    f.update()
+            fields.preferred_stack_reason_optional.value = ""
+            if fields.preferred_stack_reason_optional.page:
+                fields.preferred_stack_reason_optional.update()
             for cb in fields.feature_checks.values():
                 cb.value = False
-                cb.update()
+                if cb.page:
+                    cb.update()
             self._set_error(error_ref, "")
 
         def on_back(_e: ft.ControlEvent) -> None:
@@ -135,20 +148,35 @@ class RecommendationController(BaseController):
 
         return wrap_with_layout(self, current_route=Routes.RECOMMENDATION, body=body, theme=theme)
 
+    def _store_recommendation_session(
+        self,
+        input_data: dict[str, Any],
+        result: dict[str, Any],
+        recommendation_id: int,
+    ) -> None:
+        """Persist full engine payloads for the details page and regenerate flows."""
+        self.page.session.set(SESSION_RECOMMENDATION_INPUT, input_data)
+        self.page.session.set(SESSION_RECOMMENDATION_RESULT, result)
+        self.page.session.set(SESSION_SELECTED_RECOMMENDATION_INPUT, input_data)
+        self.page.session.set(SESSION_SELECTED_RECOMMENDATION_RESULT, result)
+        self.page.session.set(SESSION_SELECTED_RECOMMENDATION_ID, recommendation_id)
+
     def _set_error(self, ref: ft.Ref[ft.Text], message: str) -> None:
         text = ref.current
         if text is None:
             return
         text.value = message
         text.visible = bool(message)
-        text.update()
+        if text.page:
+            text.update()
 
     def _set_busy(self, ref: ft.Ref[ft.ProgressRing], busy: bool) -> None:
         ring = ref.current
         if ring is None:
             return
         ring.visible = busy
-        ring.update()
+        if ring.page:
+            ring.update()
 
 
 # ---------------------------------------------------------------------------
@@ -172,9 +200,12 @@ def generate_recommendation_from_request(data: dict[str, Any]) -> dict[str, Any]
     if validation_error:
         return {"success": False, "error": validation_error}
 
-    request = ScoringRequest.from_dict(data)
-    outcome = _scoring_service.recommend(request)
-    return {"success": True, "data": outcome.to_dict()}
+    try:
+        outcome = _scoring_service.recommend(data)
+        return {"success": True, "data": outcome}
+    except Exception as exc:
+        log.exception("Recommendation scoring failed")
+        return {"success": False, "error": str(exc)}
 
 
 def _validate_scoring_payload(data: dict[str, Any]) -> str | None:
@@ -203,24 +234,29 @@ def _validate_scoring_payload(data: dict[str, Any]) -> str | None:
 
 
 def _form_to_engine_data(fields: RecommendationFormFields) -> dict[str, Any]:
-    """Map UI form controls to the Phase 1 scoring engine request dict."""
+    """Map Step 01–04 form controls to the Phase 1 scoring engine request dict."""
     values = fields.values()
+    preferred = fields.preferred_stack_values()
     return {
         "project_name": values["project_name"],
         "project_type": values["project_type"],
         "selected_features": fields.selected_features(),
-        "project_goal": values["project_goal"],
         "team_size": values["team_size"] or "1",
         "complexity": values["complexity"] or "Medium",
-        "timeline": values["timeline"] or "Medium",
-        "requirements_stability": values["requirements_stability"] or "Mostly Stable",
-        "stakeholder_involvement": values["stakeholder_involvement"] or "Medium",
         "preferred_platform": values["preferred_platform"] or "Web",
         "development_experience": values["development_experience"] or "Intermediate",
+        "timeline": values["timeline"] or "Medium",
+        "project_goal": values["project_goal"],
         "scalability_needs": values["scalability_needs"] or "Medium",
-        "performance_requirements": values["performance_requirements"] or "Medium",
         "security_requirements": values["security_requirements"] or "Medium",
+        "performance_requirements": values["performance_requirements"] or "Medium",
         "budget_constraints": values["budget_constraints"] or "Medium",
         "maintenance_expectations": values["maintenance_expectations"] or "Medium",
         "deployment_preference": values["deployment_preference"] or "Cloud",
+        "requirements_stability": values["requirements_stability"] or "Mostly Stable",
+        "stakeholder_involvement": values["stakeholder_involvement"] or "Medium",
+        "user_preferred_language": preferred["user_preferred_language"],
+        "user_preferred_framework": preferred["user_preferred_framework"],
+        "user_preferred_sdlc": preferred["user_preferred_sdlc"],
+        "user_preferred_reason": preferred["user_preferred_reason"],
     }

@@ -52,6 +52,65 @@ MAINTENANCE_EXPECTATIONS_LEVELS = [
     "Prototype only",
 ]
 DEPLOYMENT_PREFERENCES = ["Local only", "Shared hosting", "Cloud deployment", "Docker/containerized", "Not sure"]
+PREFERRED_STACK_NONE = "None / Not sure"
+
+PREFERRED_LANGUAGE_OPTIONS = [
+    PREFERRED_STACK_NONE,
+    "Python",
+    "PHP",
+    "JavaScript",
+    "TypeScript",
+    "Java",
+    "C#",
+    "C++",
+    "C",
+    "Dart",
+    "Kotlin",
+    "Swift",
+    "Ruby",
+    "Go",
+    "Rust",
+    "SQL",
+]
+
+PREFERRED_FRAMEWORK_OPTIONS = [
+    PREFERRED_STACK_NONE,
+    "Laravel",
+    "FastAPI",
+    "Django",
+    "Flask",
+    "React",
+    "Vue",
+    "Angular",
+    "Next.js",
+    "NestJS",
+    "Express.js",
+    "Flutter",
+    "Spring Boot",
+    "ASP.NET Core",
+    "Ruby on Rails",
+    "Tauri",
+]
+
+PREFERRED_SDLC_OPTIONS = [
+    PREFERRED_STACK_NONE,
+    "Agile",
+    "Waterfall",
+    "Iterative",
+    "Incremental",
+    "Spiral",
+    "V-Model",
+    "RAD",
+    "Prototype Model",
+    "Scrum",
+    "Kanban",
+    "DevOps",
+    "Lean",
+    "Big Bang Model",
+    "Feature-Driven Development (FDD)",
+    "Extreme Programming (XP)",
+]
+
 FEATURE_OPTIONS = [
     "Authentication",
     "CRUD Operations",

@@ -9,6 +9,11 @@ from __future__ import annotations
 import re
 from typing import Any, TYPE_CHECKING
 
+from app.helpers.recommendation_engine_compat import (
+    risks_as_display_strings,
+    roadmap_source,
+    skill_gaps_as_display_strings,
+)
 from app.models.recommendation import Recommendation
 from app.utils.logger import get_logger
 
@@ -44,6 +49,7 @@ class RecommendationPersistenceService:
             raise
         if rec is None:
             raise RuntimeError("Recommendation was not returned after insert.")
+        _verify_saved_matches_engine(rec, engine_result)
         return rec
 
     @staticmethod
@@ -90,6 +96,10 @@ class RecommendationPersistenceService:
             "deployment_preference": profile.get(
                 "deployment_preference", "Cloud"
             ),
+            "user_preferred_language": profile.get("user_preferred_language", ""),
+            "user_preferred_framework": profile.get("user_preferred_framework", ""),
+            "user_preferred_sdlc": profile.get("user_preferred_sdlc", ""),
+            "user_preferred_reason": profile.get("user_preferred_reason", ""),
         }
 
 
@@ -146,6 +156,18 @@ def build_request_payload(input_data: dict[str, Any]) -> dict[str, Any]:
         "deployment_preference": str(
             input_data.get("deployment_preference", "") or "Cloud"
         ).strip(),
+        "user_preferred_language": str(
+            input_data.get("user_preferred_language", "") or ""
+        ).strip(),
+        "user_preferred_framework": str(
+            input_data.get("user_preferred_framework", "") or ""
+        ).strip(),
+        "user_preferred_sdlc": str(
+            input_data.get("user_preferred_sdlc", "") or ""
+        ).strip(),
+        "user_preferred_reason": str(
+            input_data.get("user_preferred_reason", "") or ""
+        ).strip(),
     }
 
 
@@ -183,13 +205,21 @@ def _build_explanation_document(engine_result: dict[str, Any]) -> dict[str, Any]
 
     explanation: dict[str, Any] = {
         "summary": summary or raw,
-        "risk_analysis": _as_str_list(engine_result.get("risks")),
-        "skill_gap_analysis": _as_str_list(engine_result.get("skill_gaps")),
-        "roadmap": _roadmap_as_strings(engine_result.get("roadmap")),
+        "risk_analysis": risks_as_display_strings(engine_result),
+        "skill_gap_analysis": skill_gaps_as_display_strings(engine_result),
+        "roadmap": _roadmap_as_strings(roadmap_source(engine_result)),
         "trade_offs": [],
         "scoring_basis": str(engine_result.get("scoring_basis", "") or ""),
         "defense_explanation": str(engine_result.get("defense_explanation", "") or ""),
         "validation_note": str(engine_result.get("validation_note", "") or ""),
+        "language_reason": str(engine_result.get("language_reason", "") or ""),
+        "framework_reason": str(engine_result.get("framework_reason", "") or ""),
+        "sdlc_reason": str(engine_result.get("sdlc_reason", "") or ""),
+        "why_not_this": engine_result.get("why_not_this") or [],
+        "user_preferred_stack": engine_result.get("user_preferred_stack") or {},
+        "alternative_technology_stacks": engine_result.get("alternative_technology_stacks")
+        or [],
+        "engine_full_result": engine_result,
     }
 
     for key, title, _prefix in _EXPLANATION_MARKERS:
@@ -212,10 +242,14 @@ def _build_explanation_document(engine_result: dict[str, Any]) -> dict[str, Any]
 
 
 def _build_alternatives_document(engine_result: dict[str, Any]) -> dict[str, Any]:
+    stacks = engine_result.get("alternative_technology_stacks") or []
+    if not isinstance(stacks, list):
+        stacks = []
     return {
         "languages": _alt_scores(engine_result.get("language_scores")),
         "frameworks": _alt_scores(engine_result.get("framework_scores")),
         "sdlc": _alt_scores(engine_result.get("sdlc_scores")),
+        "technology_stacks": stacks,
         "runners_up": {
             "languages": engine_result.get("alternative_languages") or [],
             "frameworks": engine_result.get("alternative_frameworks") or [],
@@ -283,6 +317,55 @@ def _as_str_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(v).strip() for v in value if str(v).strip()]
+
+
+def _verify_saved_matches_engine(rec: Recommendation, engine_result: dict[str, Any]) -> None:
+    """Log when DB columns diverge from the engine output (should not happen)."""
+    pairs = (
+        ("recommended_language", "recommended_language"),
+        ("recommended_framework", "recommended_framework"),
+        ("recommended_sdlc", "recommended_sdlc"),
+        ("confidence_score", "confidence_score"),
+    )
+    for db_attr, engine_key in pairs:
+        saved_val = getattr(rec, db_attr, None)
+        engine_val = engine_result.get(engine_key)
+        if engine_key == "confidence_score":
+            try:
+                engine_val = int(round(float(engine_val or 0)))
+            except (TypeError, ValueError):
+                engine_val = 0
+        if str(saved_val) != str(engine_val):
+            log.warning(
+                "Saved recommendation id=%s mismatch %s: db=%r engine=%r",
+                rec.id,
+                db_attr,
+                saved_val,
+                engine_val,
+            )
+
+
+def apply_engine_snapshot_to_recommendation(rec: Recommendation) -> Recommendation:
+    """Overlay DB row with embedded engine snapshot when present (display/history sync)."""
+    expl = rec.explanation or {}
+    snap = expl.get("engine_full_result")
+    if not isinstance(snap, dict) or not snap:
+        return rec
+    rec.recommended_language = str(
+        snap.get("recommended_language", rec.recommended_language) or rec.recommended_language
+    )
+    rec.recommended_framework = str(
+        snap.get("recommended_framework", rec.recommended_framework) or rec.recommended_framework
+    )
+    rec.recommended_sdlc = str(
+        snap.get("recommended_sdlc", rec.recommended_sdlc) or rec.recommended_sdlc
+    )
+    try:
+        rec.confidence_score = int(round(float(snap.get("confidence_score", rec.confidence_score))))
+    except (TypeError, ValueError):
+        pass
+    rec.confidence_score = max(0, min(100, rec.confidence_score))
+    return rec
 
 
 def _roadmap_as_strings(roadmap: Any) -> list[str]:

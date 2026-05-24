@@ -70,7 +70,7 @@ class FeedbackService:
         if rating_int < 1 or rating_int > 5:
             return FeedbackSubmitResult(
                 success=False,
-                message="Please select a rating before submitting feedback.",
+                message="Please select a rating before submitting.",
             )
 
         text = (comment or "").strip()
@@ -95,7 +95,7 @@ class FeedbackService:
             )
             return FeedbackSubmitResult(
                 success=False,
-                message="Unable to submit feedback. Please try again.",
+                message="Feedback could not be saved. Please try again.",
             )
 
         return FeedbackSubmitResult(

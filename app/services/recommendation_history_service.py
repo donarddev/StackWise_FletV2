@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 from app.models.recommendation import Recommendation
+from app.services.recommendation_persistence_service import apply_engine_snapshot_to_recommendation
 from app.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -20,12 +21,14 @@ class RecommendationHistoryService:
     def get_active_recommendations(
         self, user_id: int, *, limit: int = 500
     ) -> list[Recommendation]:
-        return self._repo.list_active_for_user(user_id, limit=limit)
+        rows = self._repo.list_active_for_user(user_id, limit=limit)
+        return [apply_engine_snapshot_to_recommendation(r) for r in rows]
 
     def get_deleted_recommendations(
         self, user_id: int, *, limit: int = 500
     ) -> list[Recommendation]:
-        return self._repo.list_deleted_for_user(user_id, limit=limit)
+        rows = self._repo.list_deleted_for_user(user_id, limit=limit)
+        return [apply_engine_snapshot_to_recommendation(r) for r in rows]
 
     def soft_delete(self, user_id: int, recommendation_id: int) -> bool:
         rec = self._repo.find_by_id(recommendation_id)

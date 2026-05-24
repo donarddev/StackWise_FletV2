@@ -41,8 +41,8 @@ class SettingsController(BaseController):
                 theme=get_theme(is_dark_mode(self.page)),
                 title="Clear chat history?",
                 message=(
-                    "This will delete your saved chatbot conversations, but it will not "
-                    "affect your recommendation history."
+                    "Are you sure you want to clear saved chatbot conversations? "
+                    "Recommendation history will remain."
                 ),
                 icon=ft.icons.DELETE_SWEEP_ROUNDED,
                 confirm_label="Clear chat history",

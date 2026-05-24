@@ -90,6 +90,9 @@ PLATFORMS: list[str] = [
 SESSION_RECOMMENDATION_INPUT = "latest_recommendation_input"
 SESSION_RECOMMENDATION_RESULT = "latest_recommendation_result"
 SESSION_SELECTED_RECOMMENDATION_ID = "selected_recommendation_id"
+# Convenience aliases (same payloads as latest_* keys)
+SESSION_SELECTED_RECOMMENDATION_INPUT = "selected_recommendation_input"
+SESSION_SELECTED_RECOMMENDATION_RESULT = "selected_recommendation_result"
 
 # ---------- Recommendation engine ----------
 

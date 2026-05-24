@@ -14,7 +14,11 @@ from app.requests.recommendation_request import (
     FEATURE_OPTIONS,
     MAINTENANCE_EXPECTATIONS_LEVELS,
     PERFORMANCE_REQUIREMENTS_LEVELS,
+    PREFERRED_FRAMEWORK_OPTIONS,
+    PREFERRED_LANGUAGE_OPTIONS,
     PREFERRED_PLATFORMS,
+    PREFERRED_SDLC_OPTIONS,
+    PREFERRED_STACK_NONE,
     PROJECT_TYPES,
     REQUIREMENTS_STABILITY_LEVELS,
     SCALABILITY_NEEDS_LEVELS,
@@ -31,6 +35,32 @@ from ui.components.section_header import section_header
 from ui.components.select_field import select_field
 from ui.themes.app_theme import Radii, Spacing
 from ui.theme import caption_style, heading_style, subheading_style, text_style
+
+_FRAMEWORK_REQUIRED_LANGUAGES: dict[str, frozenset[str]] = {
+    "Laravel": frozenset({"PHP"}),
+    "FastAPI": frozenset({"Python"}),
+    "Django": frozenset({"Python"}),
+    "Flask": frozenset({"Python"}),
+    "React": frozenset({"JavaScript", "TypeScript"}),
+    "Vue": frozenset({"JavaScript", "TypeScript"}),
+    "Angular": frozenset({"JavaScript", "TypeScript"}),
+    "Next.js": frozenset({"JavaScript", "TypeScript"}),
+    "NestJS": frozenset({"JavaScript", "TypeScript"}),
+    "Express.js": frozenset({"JavaScript", "TypeScript"}),
+    "Flutter": frozenset({"Dart"}),
+    "Spring Boot": frozenset({"Java"}),
+    "ASP.NET Core": frozenset({"C#"}),
+    "Ruby on Rails": frozenset({"Ruby"}),
+    "Tauri": frozenset({"Rust"}),
+}
+
+
+def _optional_dropdown_value(value: str | None) -> str:
+    if not value or value == PREFERRED_STACK_NONE:
+        return ""
+    return value.strip()
+
+
 def recommendation_workspace_theme(theme: Mapping[str, Any]) -> dict[str, Any]:
     """Dark-workspace tokens aligned with dashboard glass (navy cards, cyan accents).
 
@@ -90,6 +120,32 @@ class RecommendationFormFields:
         self.budget_constraints = select_field("Budget Constraints *", BUDGET_CONSTRAINTS_LEVELS, theme=t)
         self.maintenance_expectations = select_field("Maintenance Expectations *", MAINTENANCE_EXPECTATIONS_LEVELS, theme=t)
         self.deployment_preference = select_field("Deployment Preference *", DEPLOYMENT_PREFERENCES, theme=t)
+        self.preferred_language_optional = select_field(
+            "Preferred Programming Language (Optional)",
+            PREFERRED_LANGUAGE_OPTIONS,
+            value=PREFERRED_STACK_NONE,
+            theme=t,
+        )
+        self.preferred_framework_optional = select_field(
+            "Preferred Framework (Optional)",
+            PREFERRED_FRAMEWORK_OPTIONS,
+            value=PREFERRED_STACK_NONE,
+            theme=t,
+        )
+        self.preferred_sdlc_optional = select_field(
+            "Preferred SDLC Model (Optional)",
+            PREFERRED_SDLC_OPTIONS,
+            value=PREFERRED_STACK_NONE,
+            theme=t,
+        )
+        self.preferred_stack_reason_optional = input_field(
+            "Why do you prefer this stack? (Optional)",
+            hint="Example: I already know Laravel, or my teacher suggested Python, or my team prefers Agile.",
+            multiline=True,
+            min_lines=2,
+            max_lines=4,
+            theme=t,
+        )
         self.feature_checks = {
             feature: ft.Checkbox(
                 label=feature,
@@ -103,6 +159,22 @@ class RecommendationFormFields:
 
     def selected_features(self) -> list[str]:
         return [name for name, cb in self.feature_checks.items() if cb.value]
+
+    def preferred_stack_values(self) -> dict[str, str]:
+        lang = _optional_dropdown_value(self.preferred_language_optional.value)
+        fw = _optional_dropdown_value(self.preferred_framework_optional.value)
+        sdlc = _optional_dropdown_value(self.preferred_sdlc_optional.value)
+        reason = (self.preferred_stack_reason_optional.value or "").strip()
+        return {
+            "user_preferred_language": lang,
+            "user_preferred_framework": fw,
+            "user_preferred_sdlc": sdlc,
+            "user_preferred_reason": reason,
+            "preferred_language_optional": lang,
+            "preferred_framework_optional": fw,
+            "preferred_sdlc_optional": sdlc,
+            "preferred_stack_reason_optional": reason,
+        }
 
     def values(self) -> dict[str, str]:
         return {
@@ -263,9 +335,11 @@ def build_recommendation_page(
         ),
     )
 
+    preferred_stack_card = build_user_preferred_stack_section(fields, theme)
+
     generate_card = _section_card(
         theme,
-        "Step 04",
+        "Step 05",
         "Generate Decision Report",
         "Your submission will produce an explainable report ready for review or presentation.",
         ft.Column(
@@ -322,7 +396,7 @@ def build_recommendation_page(
 
     form_card = ft.Column(
         spacing=Spacing.lg,
-        controls=[profile_card, context_card, preference_card, generate_card],
+        controls=[profile_card, context_card, preference_card, preferred_stack_card, generate_card],
     )
 
     explainer_card = _guidance_card(theme)
@@ -437,6 +511,86 @@ def _submit_note_card(theme: Mapping[str, Any]) -> ft.Control:
             ],
         ),
         theme=theme,
+    )
+
+
+def _preferred_stack_compatibility_message(lang: str, framework: str) -> str:
+    if not lang or not framework:
+        return ""
+    required = _FRAMEWORK_REQUIRED_LANGUAGES.get(framework)
+    if required is None:
+        return ""
+    if lang not in required:
+        expected = " or ".join(sorted(required))
+        return (
+            f"{framework} is typically used with {expected}, not {lang}. "
+            "You can still submit — StackWise will explain this in the report later."
+        )
+    return ""
+
+
+def build_user_preferred_stack_section(
+    fields: RecommendationFormFields,
+    theme: Mapping[str, Any],
+) -> ft.Control:
+    compatibility_warning = ft.Text(
+        "",
+        size=12,
+        color=theme["warning"] if "warning" in theme else theme.get("accent_soft", theme["accent_2"]),
+        visible=False,
+    )
+
+    def refresh_compatibility(_e: ft.ControlEvent | None = None) -> None:
+        lang = _optional_dropdown_value(fields.preferred_language_optional.value)
+        fw = _optional_dropdown_value(fields.preferred_framework_optional.value)
+        message = _preferred_stack_compatibility_message(lang, fw)
+        compatibility_warning.value = message
+        compatibility_warning.visible = bool(message)
+        if compatibility_warning.page:
+            compatibility_warning.update()
+
+    fields.preferred_language_optional.on_change = refresh_compatibility
+    fields.preferred_framework_optional.on_change = refresh_compatibility
+
+    body = ft.Column(
+        spacing=Spacing.md,
+        controls=[
+            ft.ResponsiveRow(
+                spacing=Spacing.md,
+                run_spacing=Spacing.md,
+                controls=[
+                    ft.Container(
+                        col={"xs": 12, "md": 4},
+                        content=fields.preferred_language_optional,
+                    ),
+                    ft.Container(
+                        col={"xs": 12, "md": 4},
+                        content=fields.preferred_framework_optional,
+                    ),
+                    ft.Container(
+                        col={"xs": 12, "md": 4},
+                        content=fields.preferred_sdlc_optional,
+                    ),
+                    ft.Container(
+                        col={"xs": 12},
+                        content=fields.preferred_stack_reason_optional,
+                    ),
+                ],
+            ),
+            compatibility_warning,
+        ],
+    )
+
+    return _section_card(
+        theme,
+        "Step 04",
+        "User Preferred Stack",
+        (
+            "Optional: Tell StackWise AI what stack you would personally choose. "
+            "The system will compare your preference with its recommendation and explain "
+            "whether it aligns, becomes an alternative, or is not selected."
+        ),
+        body,
     )
 
 
