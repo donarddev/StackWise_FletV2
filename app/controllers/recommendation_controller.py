@@ -20,6 +20,7 @@ from app.utils.constants import (
     recommendation_result_route,
 )
 from app.utils.logger import get_logger
+from app.services.recommendation_persistence_service import attach_saved_recommendation_id
 from ui.pages.recommendation_page import (
     RecommendationFormFields,
     build_recommendation_page,
@@ -82,6 +83,7 @@ class RecommendationController(BaseController):
                     return
 
                 result = response["data"]
+                result = attach_saved_recommendation_id(result, saved.id)
                 self._store_recommendation_session(data, result, saved.id)
                 self.page.go(recommendation_result_route(saved.id))
             except Exception:

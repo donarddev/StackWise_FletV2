@@ -56,6 +56,7 @@ FRAMEWORKS: tuple[str, ...] = (
     "ASP.NET Core",
     "Ruby on Rails",
     "Tauri",
+    "Flet",
 )
 
 SDLC_MODELS: tuple[str, ...] = (
@@ -92,6 +93,7 @@ FRAMEWORK_LANGUAGES: dict[str, tuple[str, ...]] = {
     "ASP.NET Core": ("C#",),
     "Ruby on Rails": ("Ruby",),
     "Tauri": ("Rust", "TypeScript", "JavaScript"),
+    "Flet": ("Python",),
 }
 
 LANGUAGE_FRAMEWORKS: dict[str, tuple[str, ...]] = {
@@ -127,6 +129,9 @@ BASE_STACK_CANDIDATES: tuple[tuple[str, str, str], ...] = (
     ("Rust", "Tauri", "Iterative"),
     ("Rust", "Tauri", "Spiral"),
     ("TypeScript", "Tauri", "Iterative"),
+    ("Python", "Flet", "Agile"),
+    ("Python", "Flet", "Prototype Model"),
+    ("Python", "Flet", "RAD"),
 )
 
 WEB_CRUD_STACK_CANDIDATES: tuple[tuple[str, str, str], ...] = (
@@ -166,6 +171,8 @@ DESKTOP_STACK_CANDIDATES: tuple[tuple[str, str, str], ...] = (
     ("Rust", "Tauri", "Spiral"),
     ("TypeScript", "Tauri", "Iterative"),
     ("Dart", "Flutter", "Agile"),
+    ("Python", "Flet", "Agile"),
+    ("Python", "Flet", "Prototype Model"),
     ("C#", "ASP.NET Core", "Waterfall"),
 )
 
@@ -180,6 +187,8 @@ AI_ML_STACK_CANDIDATES: tuple[tuple[str, str, str], ...] = (
     ("Python", "FastAPI", "Agile"),
     ("Python", "Django", "Agile"),
     ("Python", "Flask", "Prototype Model"),
+    ("Python", "Flet", "Iterative"),
+    ("Python", "Flet", "Agile"),
 )
 
 WEB_ONLY_FRAMEWORKS: frozenset[str] = frozenset(
@@ -187,7 +196,8 @@ WEB_ONLY_FRAMEWORKS: frozenset[str] = frozenset(
 )
 FRONTEND_ONLY_FRAMEWORKS: frozenset[str] = frozenset({"React", "Vue", "Angular"})
 MOBILE_PRIMARY_FRAMEWORKS: frozenset[str] = frozenset({"Flutter"})
-DESKTOP_PRIMARY_FRAMEWORKS: frozenset[str] = frozenset({"Tauri", "Flutter"})
+DESKTOP_PRIMARY_FRAMEWORKS: frozenset[str] = frozenset({"Tauri", "Flutter", "Flet"})
+PYTHON_UI_FRAMEWORKS: frozenset[str] = frozenset({"Flet"})
 
 FRAMEWORKLESS_LANGUAGES: frozenset[str] = frozenset(
     {"Kotlin", "Swift", "C", "C++", "Go", "SQL"}
@@ -406,7 +416,7 @@ class RecommendationService:
         )
         risks = self.generate_risk_analysis(norm)
         skill_gaps = self.generate_skill_gap_analysis(norm, best)
-        roadmap = self.generate_project_roadmap(norm, best["sdlc"])
+        roadmap = self.generate_project_roadmap(norm, best["sdlc"], best["framework"])
 
         sql_note = self._sql_support_note(norm, best["language"])
         if sql_note:
@@ -1098,6 +1108,11 @@ class RecommendationService:
                 "Choose Tauri for cross-platform desktop apps needing a lightweight secure shell.",
             ),
             (
+                "Flet + Agile",
+                "Flet is strongest for Python-centered UI development, internal tools, prototypes, dashboards, and local/cross-platform interfaces.",
+                "Choose Flet when the team wants Python-based UI for dashboards, internal tools, or AI-assisted tools rather than a traditional web stack.",
+            ),
+            (
                 "C / C++ / Rust (systems)",
                 "Systems languages are unnecessary for ordinary web CRUD unless performance or firmware dominates.",
                 "Choose them for embedded, firmware, or performance-critical native components.",
@@ -1310,6 +1325,48 @@ class RecommendationService:
                 ),
             }
         ]
+        if fw == "Flet":
+            for extra in (
+                {
+                    "skill": "Flet controls and layout system",
+                    "required_level": "Intermediate",
+                    "user_level": user_level.title(),
+                    "gap_level": gap,
+                    "suggestion": "Practice Row, Column, Container, Card, ListView, and NavigationRail patterns.",
+                },
+                {
+                    "skill": "Event handling and navigation in Flet",
+                    "required_level": "Intermediate",
+                    "user_level": user_level.title(),
+                    "gap_level": gap,
+                    "suggestion": "Learn click handlers, routing/navigation, and state updates across pages.",
+                },
+                {
+                    "skill": "Database and Python service integration",
+                    "required_level": "Intermediate",
+                    "user_level": user_level.title(),
+                    "gap_level": gap,
+                    "suggestion": "Connect Flet UI to Python services, databases, and APIs used by the project.",
+                },
+                {
+                    "skill": "Flet packaging and deployment",
+                    "required_level": "Beginner",
+                    "user_level": user_level.title(),
+                    "gap_level": "Low" if user_level == "advanced" else "Moderate",
+                    "suggestion": "Review flet build and platform packaging basics for your target platform.",
+                },
+            ):
+                items.append(extra)
+            if norm.is_ai or "chatbot" in norm.combined_text:
+                items.append(
+                    {
+                        "skill": "API / Ollama integration",
+                        "required_level": "Intermediate",
+                        "user_level": user_level.title(),
+                        "gap_level": gap,
+                        "suggestion": "Wire AI/chatbot features to local or remote Python AI services from Flet.",
+                    }
+                )
         if norm.development_experience == "beginner":
             items.append(
                 {
@@ -1326,7 +1383,7 @@ class RecommendationService:
         return items
 
     def generate_project_roadmap(
-        self, norm: NormalizedRequest, selected_sdlc: str
+        self, norm: NormalizedRequest, selected_sdlc: str, selected_framework: str = ""
     ) -> list[dict[str, Any]]:
         template = ROADMAP_TEMPLATES.get(selected_sdlc, ROADMAP_TEMPLATES["Agile"])
         phases = list(template)
@@ -1341,6 +1398,38 @@ class RecommendationService:
             for phase in phases:
                 pri = list(phase.get("priorities", []))
                 phase["priorities"] = [p for p in pri if "parallel" not in p.lower()][:3]
+        if selected_framework == "Flet":
+            phases = self._flet_roadmap_adjustments(phases)
+        return phases
+
+    def _flet_roadmap_adjustments(
+        self, phases: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Append Flet-specific delivery objectives when Flet is recommended."""
+        if not phases:
+            return phases
+        first = dict(phases[0])
+        objectives = list(first.get("objectives", []))
+        deliverables = list(first.get("deliverables", []))
+        for item in (
+            "UI layout planning using Flet controls",
+            "Python service integration plan",
+        ):
+            if item not in objectives:
+                objectives.append(item)
+        for item in ("Database connection testing", "Flet navigation and state management"):
+            if item not in deliverables:
+                deliverables.append(item)
+        first["objectives"] = objectives
+        first["deliverables"] = deliverables
+        phases[0] = first
+        if len(phases) > 1:
+            last = dict(phases[-1])
+            deliverables = list(last.get("deliverables", []))
+            if "Packaging or deployment testing" not in deliverables:
+                deliverables.append("Packaging or deployment testing")
+            last["deliverables"] = deliverables
+            phases[-1] = last
         return phases
 
     def analyze_user_preferred_stack(
@@ -1527,6 +1616,7 @@ class RecommendationService:
                 ("ASP.NET Core", 20),
                 ("Tauri", 30),
                 ("Flutter", 15),
+                ("Flet", 25),
             ):
                 ctx.add_framework_score(fw, pts, "Desktop runtime/framework")
             for sdlc, pts in (("Waterfall", 15), ("Iterative", 15)):
@@ -1574,6 +1664,7 @@ class RecommendationService:
                 ("Flask", 15),
                 ("React", 10),
                 ("Next.js", 10),
+                ("Flet", 15),
             ):
                 ctx.add_framework_score(fw, pts, "AI/ML API or serving stack")
             for sdlc, pts in (
@@ -1959,6 +2050,11 @@ class RecommendationService:
                 ("FastAPI", 15),
             ):
                 ctx.add_framework_score(fw, pts, "Scalable service framework")
+            ctx.add_framework_score(
+                "Flet",
+                -25,
+                "Large-scale systems favor mature web/backend frameworks over Flet",
+            )
             for sdlc, pts in (
                 ("Agile", 15),
                 ("Spiral", 15),
@@ -1987,6 +2083,11 @@ class RecommendationService:
                 ctx.add_language_score(lang, pts, "Shared hosting friendly stack")
             for fw, pts in (("Laravel", 20), ("Vue", 5), ("React", 5)):
                 ctx.add_framework_score(fw, pts, "Shared hosting deployment")
+            ctx.add_framework_score(
+                "Flet",
+                -30,
+                "Shared hosting favors traditional web frameworks over Flet",
+            )
             for sdlc, pts in (("Waterfall", 5), ("RAD", 10)):
                 ctx.add_sdlc_score(sdlc, pts, "Hosting-constrained delivery")
 
@@ -2064,6 +2165,7 @@ class RecommendationService:
                 ctx.add_language_score(lang, pts, "Cross-platform desktop shell")
             ctx.add_framework_score("Tauri", 35, "Lightweight secure desktop shell")
             ctx.add_framework_score("Flutter", 10, "Desktop UI option")
+            ctx.add_framework_score("Flet", 20, "Python cross-platform desktop UI")
             for sdlc, pts in (("Iterative", 15), ("Agile", 10)):
                 ctx.add_sdlc_score(sdlc, pts, "Desktop iterative delivery")
 
@@ -2125,7 +2227,148 @@ class RecommendationService:
             ctx.add_language_score("TypeScript", 15, "Desktop shell with web UI")
             ctx.add_framework_score("Tauri", 25, "Cross-platform desktop shell priority")
 
+        self._score_flet_context(ctx, n)
         self._apply_sdlc_context_rules(ctx, n, primary)
+
+    def _score_flet_context(
+        self, ctx: _ScoringContext, n: NormalizedRequest
+    ) -> None:
+        """Flet scoring basis: scored strongly for Python-based UI apps, dashboards,
+        prototypes, internal tools, desktop-style apps, educational systems, and
+        AI-assisted applications per official Flet documentation (web, desktop, and
+        mobile apps in Python). Not scored as the default best option for large-scale
+        enterprise web systems because its ecosystem and deployment patterns differ
+        from mature web frameworks such as Laravel, Django, ASP.NET Core, and
+        Spring Boot."""
+        combined = n.combined_text
+        primary = n.project_context.get("primary_context", "mixed")
+        flet_signals = self._contains_any(
+            combined,
+            (
+                "internal tool",
+                "internal utility",
+                "admin utility",
+                "local tool",
+                "educational",
+                "student project",
+                "capstone",
+                "prototype",
+                "mvp",
+                "dashboard",
+                "ai-assisted",
+                "decision-support",
+            ),
+        )
+
+        if not (
+            n.is_desktop
+            or flet_signals
+            or n.is_ai
+            or primary in ("desktop", "ai_ml")
+            or (n.is_web and n.is_crud_admin and "dashboard" in combined)
+        ):
+            return
+
+        if n.is_desktop or "desktop application" in n.project_type_norm:
+            ctx.add_language_score("Python", 25, "Python desktop UI stack")
+            ctx.add_framework_score(
+                "Flet",
+                40,
+                "Python cross-platform desktop UI (official Flet capability)",
+            )
+
+        if self._contains_any(
+            combined, ("internal tool", "internal utility", "admin utility", "local tool")
+        ):
+            ctx.add_language_score("Python", 20, "Python internal tooling fit")
+            ctx.add_framework_score("Flet", 35, "Internal tool UI in Python")
+
+        if "dashboard" in combined or "admin dashboard" in n.features_text:
+            ctx.add_framework_score("Flet", 30, "Dashboard and reporting UI in Python")
+
+        if n.is_ai or "chatbot" in combined:
+            ctx.add_language_score("Python", 15, "Python AI-assisted tooling")
+            ctx.add_framework_score(
+                "Flet",
+                25,
+                "Python UI for AI-assisted tools and local AI integration",
+            )
+
+        if n.development_experience in ("beginner", "intermediate"):
+            ctx.add_language_score("Python", 10, "Accessible Python UI stack")
+            ctx.add_framework_score(
+                "Flet",
+                15,
+                "Beginner-friendly Python UI development",
+            )
+
+        if n.timeline == "short" and n.complexity in ("low", "medium"):
+            ctx.add_framework_score("Flet", 12, "Rapid Python UI prototyping")
+
+        if n.deployment_preference == "local":
+            ctx.add_framework_score(
+                "Flet",
+                15,
+                "Local or desktop-style deployment fit",
+            )
+
+        flet_feature_markers = (
+            "ai ml features",
+            "chat messaging",
+            "reports analytics",
+            "admin dashboard",
+            "offline-first mode",
+            "api integrations",
+        )
+        if any(marker in n.features_text for marker in flet_feature_markers):
+            ctx.add_framework_score(
+                "Flet",
+                18,
+                "Selected features align with Python UI and local integration",
+            )
+
+        if n.is_web and n.is_crud_admin and primary != "mobile_first":
+            ctx.add_framework_score(
+                "Flet",
+                10,
+                "Moderate fit for web admin/reporting with Python UI",
+            )
+
+        if n.is_mobile and primary == "mobile_first":
+            ctx.add_framework_score(
+                "Flet",
+                -25,
+                "Mobile-first projects favor Flutter unless Python prototype is intended",
+            )
+            if "python" in combined or "prototype" in combined:
+                ctx.add_framework_score("Flet", 10, "Python cross-platform prototype option")
+
+        if primary == "backend_api" and not flet_signals:
+            ctx.add_framework_score(
+                "Flet",
+                -35,
+                "API-only backend projects do not need a Flet UI framework",
+            )
+
+        if n.deployment_preference == "shared hosting":
+            ctx.add_framework_score(
+                "Flet",
+                -20,
+                "Shared hosting deployment is a weak fit for Flet",
+            )
+
+        if (
+            self._contains_any(
+                combined,
+                ("enterprise web", "ecommerce", "seo", "public web platform", "saas"),
+            )
+            and not flet_signals
+        ):
+            ctx.add_framework_score(
+                "Flet",
+                -20,
+                "Large public web platforms favor mature web frameworks over Flet",
+            )
 
     def _apply_sdlc_context_rules(
         self, ctx: _ScoringContext, n: NormalizedRequest, primary: str
@@ -2223,7 +2466,7 @@ class RecommendationService:
                 ("C++", 10),
             ):
                 ctx.add_language_score(lang, pts, "Desktop CRUD application")
-            for fw, pts in (("Tauri", 25), ("Flutter", 15), ("ASP.NET Core", 15)):
+            for fw, pts in (("Tauri", 25), ("Flutter", 15), ("Flet", 20), ("ASP.NET Core", 15)):
                 ctx.add_framework_score(fw, pts, "Desktop CRUD framework")
             return
         if primary == "backend_api":
@@ -2423,7 +2666,7 @@ class RecommendationService:
                 return 25
             if pair == ("Dart", "Flutter"):
                 return -35
-            if fw == "Tauri":
+            if fw in ("Tauri", "Flet"):
                 return -40
         elif primary == "backend_api":
             bonuses = {
@@ -2439,6 +2682,22 @@ class RecommendationService:
             if fw in FRONTEND_ONLY_FRAMEWORKS:
                 return -40
         elif primary == "desktop":
+            if pair == ("Python", "Flet"):
+                bonus = 50
+                if norm.development_experience in ("beginner", "intermediate"):
+                    bonus += 15
+                if self._contains_any(
+                    norm.combined_text,
+                    ("dashboard", "internal tool", "ai", "chatbot", "reports"),
+                ):
+                    bonus += 15
+                if (
+                    "lightweight" in norm.combined_text
+                    and "secure" in norm.combined_text
+                    and norm.development_experience == "advanced"
+                ):
+                    bonus -= 15
+                return bonus
             if pair == ("Rust", "Tauri"):
                 return 70
             if pair == ("TypeScript", "Tauri"):
@@ -2455,6 +2714,10 @@ class RecommendationService:
         elif primary == "ai_ml":
             if lang == "Python" and fw in ("FastAPI", "Django", "Flask"):
                 return 40
+            if pair == ("Python", "Flet") and (
+                norm.is_crud_admin or "dashboard" in norm.combined_text or norm.is_ai
+            ):
+                return 35
             if fw == "Laravel" and "crud" in norm.features_text:
                 return -25
         elif primary == "database_centered":
@@ -2486,7 +2749,7 @@ class RecommendationService:
             if lang == "PHP":
                 penalty += 40
         elif primary == "web_crud":
-            if fw == "Tauri" or (lang == "Dart" and fw == "Flutter"):
+            if fw == "Tauri" or fw == "Flet" or (lang == "Dart" and fw == "Flutter"):
                 penalty += 50
         elif primary == "backend_api":
             if fw in FRONTEND_ONLY_FRAMEWORKS:
@@ -2580,7 +2843,7 @@ class RecommendationService:
                 if replacement:
                     return replacement, reject_reason
         elif primary == "web_crud":
-            if fw in ("Tauri",) or (lang == "Dart" and fw == "Flutter"):
+            if fw in ("Tauri", "Flet") or (lang == "Dart" and fw == "Flutter"):
                 reject_reason = "web_crud: mobile/desktop stack not primary"
                 replacement = pick_family(
                     lambda l, f: f
@@ -2614,7 +2877,8 @@ class RecommendationService:
             if fw in ("Laravel", "Django", "Ruby on Rails"):
                 reject_reason = "desktop: web MVC stack not primary"
                 replacement = pick_family(
-                    lambda l, f: f in ("Tauri", "Flutter") or l in ("Rust", "TypeScript", "C#")
+                    lambda l, f: f in ("Tauri", "Flutter", "Flet")
+                    or l in ("Rust", "TypeScript", "C#", "Python")
                 )
                 if replacement:
                     return replacement, reject_reason
@@ -3382,7 +3646,7 @@ class RecommendationService:
         return "High"
 
 
-# Framework skill maps (all 15 frameworks)
+# Framework skill maps (all framework candidates)
 FRAMEWORK_SKILL_MAP: dict[str, dict[str, str]] = {
     "Laravel": {
         "skill": "Laravel (PHP MVC)",
@@ -3458,6 +3722,14 @@ FRAMEWORK_SKILL_MAP: dict[str, dict[str, str]] = {
         "skill": "Tauri (desktop shell)",
         "required_level": "Advanced",
         "suggestion": "Learn Rust/TS integration, IPC, packaging, and desktop security boundaries.",
+    },
+    "Flet": {
+        "skill": "Flet (Python UI)",
+        "required_level": "Beginner",
+        "suggestion": (
+            "Learn Flet controls, layout, event handling, routing/navigation, and state "
+            "management; then connect Python services, databases, and packaging basics."
+        ),
     },
 }
 

@@ -151,6 +151,21 @@ ARTICLES: list[dict] = [
             "**Trade-offs:** Dart language, larger app sizes than native, native-platform integrations sometimes need plugins."
         ),
     },
+    {
+        "slug": "framework-flet",
+        "category": "Frameworks",
+        "title": "Flet — Python UI for Web, Desktop, and Mobile",
+        "summary": "Build interactive web, desktop, and mobile apps in pure Python without separate frontend stacks.",
+        "tags": "framework,python,desktop,web,cross-platform,ui",
+        "content": (
+            "Flet lets Python developers build user interfaces for web, desktop, and mobile from one codebase. "
+            "Official documentation positions it for teams that prefer Python over HTML/CSS/JavaScript for UI work.\n\n"
+            "**Best fit for:** Dashboards, internal tools, educational apps, prototypes, and AI-assisted tools "
+            "where Python services and UI can live together.\n\n"
+            "**Trade-offs:** Smaller ecosystem than Laravel, Django, React, or Flutter; deployment patterns vary by "
+            "target platform and may need extra setup compared with traditional shared-hosting web stacks."
+        ),
+    },
     # ---------- SDLC ----------
     {
         "slug": "sdlc-agile-scrum",

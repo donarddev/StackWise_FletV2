@@ -443,7 +443,7 @@ def test_web_crud_student_portal() -> list[str]:
         }
         if stack not in allowed:
             errs.append(f"{name}: expected PHP+Laravel or Python+Django, got {stack[0]}+{stack[1]}")
-        if data["recommended_framework"] in ("Flutter", "Tauri") or data["recommended_language"] in (
+        if data["recommended_framework"] in ("Flutter", "Tauri", "Flet") or data["recommended_language"] in (
             "C",
             "C++",
             "Rust",
@@ -999,6 +999,202 @@ def test_recommendation_variety() -> list[str]:
     return errs
 
 
+def test_flet_desktop_dashboard() -> list[str]:
+    """Desktop dashboard with Python team — Flet should win or rank at the top."""
+    payload = {
+        "project_name": "Ops Dashboard",
+        "project_type": "Desktop Application",
+        "selected_features": [
+            "Admin Dashboard",
+            "Reports / Analytics",
+            "CRUD Operations",
+        ],
+        "project_goal": (
+            "Python team building a desktop dashboard with reports, analytics, "
+            "and local database integration for internal operations."
+        ),
+        "team_size": 2,
+        "complexity": "Medium",
+        "timeline": "Short",
+        "requirements_stability": "Somewhat Changing",
+        "stakeholder_involvement": "Medium",
+        "preferred_platform": "Desktop",
+        "development_experience": "Beginner",
+        "scalability_needs": "Small user base",
+        "performance_requirements": "Moderate",
+        "security_requirements": "Moderate",
+        "budget_constraints": "Low",
+        "maintenance_expectations": "Medium",
+        "deployment_preference": "Local only",
+    }
+
+    def checks(data: dict[str, Any], name: str) -> list[str]:
+        errs: list[str] = []
+        lang, fw = data["recommended_language"], data["recommended_framework"]
+        if (lang, fw) != ("Python", "Flet"):
+            alts = data.get("alternative_technology_stacks", []) or []
+            top_alt = alts[0] if alts else {}
+            if not (
+                (lang, fw) == ("Python", "Flet")
+                or top_alt.get("language") == "Python"
+                and top_alt.get("framework") == "Flet"
+            ):
+                errs.append(
+                    f"{name}: expected Python + Flet as recommendation or top alternative, "
+                    f"got {lang} + {fw}"
+                )
+        return errs
+
+    return run_case("Flet desktop dashboard", payload, checks)
+
+
+def test_flet_ai_internal_tool() -> list[str]:
+    """AI-assisted internal tool — Python + Flet should score strongly."""
+    payload = {
+        "project_name": "Insight Desk",
+        "project_type": "Internal Tool",
+        "selected_features": [
+            "AI / ML Features",
+            "Chat / Messaging",
+            "Reports / Analytics",
+            "Admin Dashboard",
+        ],
+        "project_goal": (
+            "AI-assisted internal tool with chatbot, analytics, and Python-based UI "
+            "for a small operations team."
+        ),
+        "team_size": 3,
+        "complexity": "Medium",
+        "timeline": "Short",
+        "requirements_stability": "Changing",
+        "stakeholder_involvement": "High",
+        "preferred_platform": "Desktop",
+        "development_experience": "Intermediate",
+        "user_preferred_language": "Python",
+        "user_preferred_framework": "Flet",
+        "scalability_needs": "Medium",
+        "performance_requirements": "Moderate",
+        "security_requirements": "Moderate",
+        "budget_constraints": "Low",
+        "maintenance_expectations": "Medium",
+        "deployment_preference": "Local only",
+    }
+
+    def checks(data: dict[str, Any], name: str) -> list[str]:
+        errs: list[str] = []
+        if data["recommended_language"] != "Python":
+            errs.append(f"{name}: expected Python language")
+        if data["recommended_framework"] != "Flet":
+            errs.append(
+                f"{name}: expected Flet framework, got {data['recommended_framework']}"
+            )
+        return errs
+
+    return run_case("Flet AI internal tool", payload, checks)
+
+
+def test_flet_mobile_flutter_wins() -> list[str]:
+    """Mobile-first — Flutter should beat Python + Flet."""
+    return test_mobile()
+
+
+def test_flet_web_crud_shared_hosting_laravel() -> list[str]:
+    """Web CRUD on shared hosting with PHP preference — Laravel should beat Flet."""
+    payload = {
+        "project_name": "Barangay Records",
+        "project_type": "Web Application",
+        "selected_features": ["Authentication", "CRUD Operations", "Admin Dashboard"],
+        "project_goal": "Traditional web CRUD admin system for shared hosting deployment",
+        "team_size": 3,
+        "complexity": "Medium",
+        "timeline": "Short",
+        "requirements_stability": "Mostly Stable",
+        "stakeholder_involvement": "Medium",
+        "preferred_platform": "Web",
+        "development_experience": "Beginner",
+        "user_preferred_language": "PHP",
+        "user_preferred_framework": "Laravel",
+        "scalability_needs": "Medium user base",
+        "performance_requirements": "Moderate",
+        "security_requirements": "Moderate",
+        "budget_constraints": "Low",
+        "maintenance_expectations": "Medium",
+        "deployment_preference": "Shared hosting",
+    }
+
+    def checks(data: dict[str, Any], name: str) -> list[str]:
+        errs: list[str] = []
+        if data["recommended_language"] != "PHP" or data["recommended_framework"] != "Laravel":
+            errs.append(
+                f"{name}: expected PHP + Laravel, got "
+                f"{data['recommended_language']} + {data['recommended_framework']}"
+            )
+        if data["recommended_framework"] == "Flet":
+            errs.append(f"{name}: Flet must not beat Laravel for shared-hosting web CRUD")
+        return errs
+
+    return run_case("Laravel beats Flet shared hosting CRUD", payload, checks)
+
+
+def test_flet_enterprise_api_backend() -> list[str]:
+    """Large enterprise API backend — backend frameworks should beat Flet."""
+    payload = {
+        "project_name": "Enterprise Integration API",
+        "project_type": "Backend System",
+        "selected_features": ["API / Integrations", "Authentication", "Role-based Access"],
+        "project_goal": (
+            "Large enterprise API backend with high scalability and cloud deployment "
+            "for public integrations."
+        ),
+        "team_size": 8,
+        "complexity": "High",
+        "timeline": "5–6 months",
+        "requirements_stability": "Very Stable",
+        "stakeholder_involvement": "Medium",
+        "preferred_platform": "Backend/API",
+        "development_experience": "Advanced",
+        "scalability_needs": "Expected to grow fast",
+        "performance_requirements": "High",
+        "security_requirements": "High",
+        "budget_constraints": "Flexible",
+        "maintenance_expectations": "Production-ready system",
+        "deployment_preference": "Cloud deployment",
+    }
+
+    def checks(data: dict[str, Any], name: str) -> list[str]:
+        errs: list[str] = []
+        fw = data["recommended_framework"]
+        if fw == "Flet":
+            errs.append(f"{name}: Flet must not be primary for enterprise API backend")
+        if fw not in ("FastAPI", "Spring Boot", "ASP.NET Core", "NestJS", "Express.js", "Laravel"):
+            errs.append(f"{name}: expected enterprise/backend framework, got {fw}")
+        return errs
+
+    return run_case("Enterprise API beats Flet", payload, checks)
+
+
+def test_flet_compatibility_python_only() -> list[str]:
+    """Flet must only pair with Python."""
+    invalid_pairs = [
+        ("PHP", "Flet"),
+        ("Java", "Flet"),
+        ("C#", "Flet"),
+        ("Dart", "Flet"),
+        ("Ruby", "Flet"),
+        ("Go", "Flet"),
+    ]
+    errs: list[str] = []
+    allowed = COMPATIBILITY.get("Flet")
+    if allowed != ("Python",):
+        errs.append(f"Flet compatibility map must be Python-only, got {allowed}")
+    for lang, fw in invalid_pairs:
+        if is_compatible(lang, fw):
+            errs.append(f"Invalid pair should be rejected: {lang} + {fw}")
+    if not is_compatible("Python", "Flet"):
+        errs.append("Python + Flet should be compatible")
+    return errs
+
+
 def main() -> int:
     cases = [
         test_web_crud_student_portal,
@@ -1017,6 +1213,12 @@ def main() -> int:
         test_hospital_sdlc_not_devops_by_default,
         test_new_confidence_not_overwritten,
         test_recommendation_variety,
+        test_flet_desktop_dashboard,
+        test_flet_ai_internal_tool,
+        test_flet_mobile_flutter_wins,
+        test_flet_web_crud_shared_hosting_laravel,
+        test_flet_enterprise_api_backend,
+        test_flet_compatibility_python_only,
     ]
     all_errors: list[str] = []
     print("StackWise Recommendation Engine — Phase 2.4 Tests\n")

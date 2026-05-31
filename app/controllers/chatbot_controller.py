@@ -45,12 +45,6 @@ class ChatbotController(BaseController):
             if not text:
                 return
 
-            input_field = input_ref.current
-            if input_field is not None:
-                input_field.value = ""
-                if input_field.page:
-                    input_field.update()
-
             self._append_message(messages_ref, role="user", content=text, author=user.full_name)
             self._append_typing(messages_ref)
             self.page.update()

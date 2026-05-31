@@ -239,3 +239,31 @@ def run_migrations(db: "DatabaseService") -> None:
             )
         db.execute("INSERT INTO schema_version (version) VALUES (%s)", (6,))
         log.info("Applied migration v6 (recommendations.deleted_at).")
+
+    # Migration v7: research support output storage
+    if current < 7:
+        db.script(
+            """
+            CREATE TABLE IF NOT EXISTS research_outputs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                recommendation_id INT NOT NULL,
+                user_id INT NULL,
+                research_type VARCHAR(100) NULL,
+                research_title VARCHAR(255) NULL,
+                research_inputs_json LONGTEXT NULL,
+                research_draft_json LONGTEXT NULL,
+                suggested_journals_json LONGTEXT NULL,
+                search_queries_json LONGTEXT NULL,
+                open_access_links_json LONGTEXT NULL,
+                publication_recommendation_json LONGTEXT NULL,
+                scopus_verification_note TEXT NULL,
+                generated_by_model VARCHAR(100) NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_research_recommendation (recommendation_id),
+                INDEX idx_research_user (user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            """
+        )
+        db.execute("INSERT INTO schema_version (version) VALUES (%s)", (7,))
+        log.info("Applied migration v7 (research_outputs).")

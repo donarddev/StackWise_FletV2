@@ -171,6 +171,25 @@ def build_request_payload(input_data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def attach_saved_recommendation_id(result: dict[str, Any], saved_id: int) -> dict[str, Any]:
+    """Attach saved database ID aliases to an engine result payload."""
+    out = dict(result or {})
+    out["id"] = saved_id
+    out["recommendation_id"] = saved_id
+    out["record_id"] = saved_id
+
+    saved = out.get("saved_recommendation")
+    if isinstance(saved, dict):
+        saved_obj = dict(saved)
+    else:
+        saved_obj = {}
+    saved_obj["id"] = saved_id
+    saved_obj["recommendation_id"] = saved_id
+    saved_obj["record_id"] = saved_id
+    out["saved_recommendation"] = saved_obj
+    return out
+
+
 def build_result_payload(engine_result: dict[str, Any]) -> dict[str, Any]:
     """Map engine ``RecommendationResult.to_dict()`` into repository result shape."""
     score_raw = engine_result.get("confidence_score", 0)

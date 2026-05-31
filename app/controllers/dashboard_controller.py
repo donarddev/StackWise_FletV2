@@ -18,6 +18,7 @@ from app.utils.constants import (
 from ui.components.toast import show_toast
 from ui.pages.dashboard_page import build_dashboard_page
 from ui.theme import get_theme, is_dark_mode
+from app.services.recommendation_persistence_service import attach_saved_recommendation_id
 
 
 class DashboardController(BaseController):
@@ -75,8 +76,9 @@ class DashboardController(BaseController):
                 kind="warning",
             )
             return
+        result = attach_saved_recommendation_id(response["data"], new_rec.id)
         self.page.session.set(SESSION_RECOMMENDATION_INPUT, input_data)
-        self.page.session.set(SESSION_RECOMMENDATION_RESULT, response["data"])
+        self.page.session.set(SESSION_RECOMMENDATION_RESULT, result)
         self.page.session.set(SESSION_SELECTED_RECOMMENDATION_ID, new_rec.id)
         show_toast(self.page, "Recommendation regenerated.", kind="success")
         self.page.go(recommendation_result_route(new_rec.id))

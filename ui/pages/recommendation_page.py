@@ -52,6 +52,7 @@ _FRAMEWORK_REQUIRED_LANGUAGES: dict[str, frozenset[str]] = {
     "ASP.NET Core": frozenset({"C#"}),
     "Ruby on Rails": frozenset({"Ruby"}),
     "Tauri": frozenset({"Rust"}),
+    "Flet": frozenset({"Python"}),
 }
 
 

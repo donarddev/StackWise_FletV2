@@ -183,14 +183,25 @@ def build_chatbot_page(
         ],
     )
 
+    def _submit_chat_input(raw: str) -> None:
+        message = (raw or "").strip()
+        if not message:
+            return
+        field = input_field_ref.current
+        if field is not None:
+            field.value = ""
+            if page is not None:
+                page.update()
+        on_send(message)
+
     chat_input = input_field(
         "",
         hint="Ask anything — languages, frameworks, SDLC, your last recommendation...",
         icon=ft.icons.CHAT_BUBBLE_OUTLINE,
-        on_submit=lambda e: on_send(e.control.value or ""),
+        on_submit=lambda e: _submit_chat_input(e.control.value or ""),
         theme=theme,
+        ref=input_field_ref,
     )
-    chat_input.ref = input_field_ref
     # Composer field: calm border; cyan focus (matches dashboard glass).
     chat_input.bgcolor = glass["header_bg"]
     chat_input.border_color = glass["card_border"]
@@ -216,7 +227,7 @@ def build_chatbot_page(
         height=44,
         alignment=ft.alignment.center,
         ink=True,
-        on_click=lambda _e: on_send(chat_input.value or ""),
+        on_click=lambda _e: _submit_chat_input(chat_input.value or ""),
         shadow=ft.BoxShadow(
             spread_radius=0,
             blur_radius=10,

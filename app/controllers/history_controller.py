@@ -42,6 +42,7 @@ from ui.pages.history_page import (
 )
 from ui.theme import get_theme, is_dark_mode
 from ui.themes.app_theme import Colors, Radii, Typography
+from app.services.recommendation_persistence_service import attach_saved_recommendation_id
 
 
 class HistoryController(BaseController):
@@ -331,8 +332,9 @@ class HistoryController(BaseController):
                 kind="warning",
             )
             return
+        result = attach_saved_recommendation_id(response["data"], new_rec.id)
         self.page.session.set(SESSION_RECOMMENDATION_INPUT, input_data)
-        self.page.session.set(SESSION_RECOMMENDATION_RESULT, response["data"])
+        self.page.session.set(SESSION_RECOMMENDATION_RESULT, result)
         self.page.session.set(SESSION_SELECTED_RECOMMENDATION_ID, new_rec.id)
         show_toast(self.page, "Recommendation regenerated.", kind="success")
         self._reload_history_cache(user.id)

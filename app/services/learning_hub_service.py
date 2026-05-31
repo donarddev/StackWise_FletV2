@@ -45,8 +45,10 @@ class LearningHubService:
                 topic.get("recommended_when", ""),
                 topic.get("avoid_when", ""),
                 " ".join(topic.get("tags", [])),
+                " ".join(topic.get("related_technologies", [])),
                 " ".join(topic.get("common_frameworks", [])),
                 " ".join(topic.get("learning_path", [])),
+                " ".join(topic.get("references", [])),
             ]
             if query_text in " ".join(searchable).lower():
                 result.append(topic)

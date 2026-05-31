@@ -46,6 +46,16 @@ class RecommendationResultController(BaseController):
 
         theme = get_theme(is_dark_mode(self.page))
         rec_id = self._resolve_recommendation_id()
+        loaded_name = ""
+        if rec_id is not None:
+            loaded_rec = self.container.recommendation_repository.find_by_id(rec_id)
+            if loaded_rec is not None:
+                loaded_name = loaded_rec.project_name
+        log.info(
+            "Recommendation Details loaded: resolved_recommendation_id=%s project_name=%s",
+            rec_id,
+            loaded_name,
+        )
 
         session_result, session_input = self._get_session_engine_payload()
         session_id = self.page.session.get(SESSION_SELECTED_RECOMMENDATION_ID)
@@ -121,6 +131,7 @@ class RecommendationResultController(BaseController):
             input_data=inp,
             theme=theme,
             generated_label=format_generated_label(),
+            record_id=rec_id,
             on_back_recommendation=lambda _e: self.navigation.to_recommendation(),
             on_back_history=lambda _e: self.navigation.to_history(),
             on_copy_summary=on_copy,
@@ -205,6 +216,8 @@ class RecommendationResultController(BaseController):
         body = build_recommendation_result_page(
             rec=rec,
             theme=theme,
+            page=self.page,
+            viewer_user_id=user_id,
             not_found=not_found,
             on_back_recommendation=lambda _e: self.navigation.to_recommendation(),
             on_back_history=lambda _e: self.navigation.to_history(),

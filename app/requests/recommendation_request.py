@@ -90,6 +90,7 @@ PREFERRED_FRAMEWORK_OPTIONS = [
     "ASP.NET Core",
     "Ruby on Rails",
     "Tauri",
+    "Flet",
 ]
 
 PREFERRED_SDLC_OPTIONS = [

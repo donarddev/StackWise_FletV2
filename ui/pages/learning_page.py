@@ -369,10 +369,12 @@ def _topic_card(
 ) -> ft.Control:
     limitations = topic.get("limitations", [])
     first_limitation = limitations[0] if limitations else "No limitations listed."
-    related_tech = list(topic.get("common_frameworks", []))
-    related_language = topic.get("related_language")
-    if related_language:
-        related_tech.append(related_language)
+    related_tech = list(topic.get("related_technologies", []))
+    if not related_tech:
+        related_tech = list(topic.get("common_frameworks", []))
+        related_language = topic.get("related_language")
+        if related_language:
+            related_tech.append(related_language)
     learning_path = topic.get("learning_path", [])
     next_step = learning_path[-1] if learning_path else "Continue exploring this topic."
 
@@ -445,6 +447,7 @@ def _topic_card(
             height=None if expanded else 620,
             content=ft.Column(
                 spacing=Spacing.sm,
+                scroll=ft.ScrollMode.AUTO if not expanded else None,
                 controls=[
                     top_row,
                     ft.Row(

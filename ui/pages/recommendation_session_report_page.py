@@ -76,6 +76,7 @@ def build_session_recommendation_report(
     input_data: Optional[dict[str, Any]],
     theme: Mapping[str, Any],
     generated_label: str,
+    record_id: Optional[int] = None,
     on_back_recommendation: Callable[[ft.ControlEvent], None],
     on_back_history: Callable[[ft.ControlEvent], None],
     on_copy_summary: Optional[Callable[[ft.ControlEvent], None]],
@@ -107,10 +108,13 @@ def build_session_recommendation_report(
         )
 
     data = report_data_from_session(result, inp, generated_label=generated_label)
+    if record_id is not None:
+        data.record_id = record_id
 
     return build_decision_report_body(
         data,
         theme=rw,
+        route_params={"id": record_id} if record_id is not None else None,
         on_back_recommendation=on_back_recommendation,
         on_back_history=on_back_history,
         on_copy_summary=on_copy_summary,

@@ -590,10 +590,35 @@ FRAMEWORK_PROFILES: list[FrameworkTechProfile] = [
         performance=_tier_map(3, 3, 3),
         experience={"Intermediate": 2, "Advanced": 3, "Beginner": 0, "Team has mixed experience": 1},
     ),
+    FrameworkTechProfile(
+        name="Flet",
+        language="Python",
+        sources=(
+            "Official Flet documentation",
+            "Official Flet GitHub",
+            "Official Flet build documentation",
+        ),
+        project_types={
+            "Desktop Application": 3,
+            "Web Application": 2,
+            "Information System": 2,
+            "Machine Learning / AI": 2,
+        },
+        features={
+            "Admin Dashboard": 3,
+            "Reports / Analytics": 3,
+            "AI / ML Features": 2,
+            "Chat / Messaging": 2,
+            "Offline-first Mode": 2,
+        },
+        platforms={"Desktop": 3, "Web": 2, "Cross-platform": 3},
+        experience={"Beginner": 3, "Intermediate": 3, "Advanced": 2, "Team has mixed experience": 2},
+        deployment={"Local only": 3, "Cloud deployment": 2},
+    ),
 ]
 
 LANGUAGE_FRAMEWORK_MAP: dict[str, list[str]] = {
-    "Python": ["FastAPI", "Django", "Flask"],
+    "Python": ["FastAPI", "Django", "Flask", "Flet"],
     "PHP": ["Laravel"],
     "JavaScript / TypeScript": ["Next.js", "React", "Express", "NestJS"],
     "Java": ["Spring Boot"],

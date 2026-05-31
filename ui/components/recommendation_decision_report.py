@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -22,6 +23,16 @@ from app.helpers.recommendation_engine_compat import (
 )
 from app.models.recommendation import Recommendation
 from app.models.recommendation_feedback import RecommendationFeedback
+from app.controllers.research_support_controller import (
+    delete_saved_research_support as rs_delete_saved_research_support,
+    generate_ai_research_support_for_recommendation as rs_generate_ai_research_support_for_recommendation,
+    generate_template_research_support_for_recommendation as rs_generate_template_research_support_for_recommendation,
+    generate_dummy_research_support_for_recommendation as rs_generate_dummy_research_support_for_recommendation,
+    get_research_type_details as rs_get_research_type_details,
+    get_saved_research_support as rs_get_saved_research_support,
+    get_supported_research_types as rs_get_supported_research_types,
+    validate_research_inputs as rs_validate_research_inputs,
+)
 from app.utils.constants import confidence_label
 from ui.components.input_field import input_field
 from ui.components.primary_button import primary_button
@@ -40,6 +51,8 @@ _C_PANEL = "#132033"
 _C_PANEL_BD = "#2A3B55"
 _C_INNER = "#101827"
 _C_INNER_BD = "#24364F"
+_C_FORM_BG = "#0F1B2A"
+_C_FORM_BD = "#2B4B66"
 # Trade-off panels (alternatives) — unchanged green-teal family
 _C_REASON_BG = "#0c2228"
 _C_REASON_BD = "#1e4d56"
@@ -276,6 +289,10 @@ def build_decision_report_body(
     data: DecisionReportData,
     *,
     theme: Mapping[str, Any],
+    page: Optional[ft.Page] = None,
+    input_data: Optional[Mapping[str, Any]] = None,
+    user_id: Optional[int] = None,
+    route_params: Optional[Mapping[str, Any]] = None,
     on_back_recommendation: Callable[[ft.ControlEvent], None],
     on_back_history: Callable[[ft.ControlEvent], None],
     on_copy_summary: Optional[Callable[[ft.ControlEvent], None]] = None,
@@ -315,6 +332,16 @@ def build_decision_report_body(
     roadmap_section = build_project_roadmap_section(data)
     if roadmap_section is not None:
         sections.append(roadmap_section)
+
+    research_section = build_research_support_section(
+        page,
+        data,
+        input_data,
+        route_params=route_params,
+        user_id=user_id,
+    )
+    if research_section is not None:
+        sections.append(research_section)
 
     left_sections = _left_column(data, rw)
     if left_sections:
@@ -1001,6 +1028,17 @@ def get_stack_tradeoff_fallback(
             [
                 "Steeper learning curve",
                 "Smaller ecosystem compared to traditional web stacks",
+            ],
+        ),
+        "python|flet": (
+            [
+                "Python-based UI for dashboards, internal tools, and prototypes",
+                "Keeps UI and backend logic in one Python codebase",
+                "Good fit for AI-assisted tools and local/cross-platform interfaces",
+            ],
+            [
+                "Smaller ecosystem than mature web frameworks",
+                "Not the default choice for large public web or enterprise SaaS systems",
             ],
         ),
         "ruby|ruby on rails": (
@@ -2416,6 +2454,1279 @@ def chunk_items(items: list[Any], chunk_size: int) -> list[list[Any]]:
     return [items[i : i + chunk_size] for i in range(0, len(items), chunk_size)]
 
 
+def build_research_support_section(
+    page: Optional[ft.Page],
+    result: DecisionReportData,
+    input_data: Optional[Mapping[str, Any]],
+    *,
+    route_params: Optional[Mapping[str, Any]] = None,
+    user_id: Optional[int] = None,
+) -> Optional[ft.Control]:
+    recommendation_id = resolve_recommendation_id(result, input_data, route_params)
+    recommendation_data = _build_recommendation_data_for_research(result)
+    project_data = _build_project_data_for_research(result, input_data)
+
+    supported_result = rs_get_supported_research_types()
+    supported_types = supported_result.get("data") if supported_result.get("success") else []
+    if not isinstance(supported_types, list):
+        supported_types = []
+
+    saved_output = None
+    if recommendation_id is not None:
+        fetched = rs_get_saved_research_support(recommendation_id, user_id)
+        if fetched.get("success"):
+            saved_output = fetched.get("data")
+
+    state: dict[str, Any] = {
+        "selected_type": "",
+        "template": None,
+        "field_controls": {},
+        "supported_types": supported_types,
+        "saved_output": _normalize_saved_output(saved_output),
+        "show_form": saved_output is None,
+        "status_message": "",
+        "status_color": _C_SECONDARY,
+        "is_generating": False,
+        "fallback_available": False,
+        "generation_error": "",
+    }
+
+    if isinstance(state["saved_output"], dict):
+        saved_type = str(state["saved_output"].get("research_type") or "").strip()
+        if saved_type:
+            state["selected_type"] = saved_type
+
+    status_ref = ft.Ref[ft.Text]()
+    body_ref = ft.Ref[ft.Container]()
+
+    def set_status(message: str, color: str = _C_SECONDARY) -> None:
+        state["status_message"] = message
+        state["status_color"] = color
+        text = status_ref.current
+        if text is None:
+            return
+        text.value = message
+        text.color = color
+        text.visible = bool(message)
+        if text.page:
+            text.update()
+
+    def fetch_template(selected: str) -> None:
+        state["template"] = None
+        if not selected:
+            return
+        details = rs_get_research_type_details(selected)
+        if details.get("success") and isinstance(details.get("data"), dict):
+            state["template"] = details["data"]
+
+    if state["selected_type"]:
+        fetch_template(state["selected_type"])
+
+    if recommendation_id is None:
+        set_status(
+            "Cannot generate research support because the recommendation record ID is missing.",
+            _C_WARNING,
+        )
+
+    def rerender() -> None:
+        holder = body_ref.current
+        if holder is None:
+            return
+        holder.content = _build_research_support_body(
+            page=page,
+            result=result,
+            input_data=input_data,
+            recommendation_id=recommendation_id,
+            user_id=user_id,
+            recommendation_data=recommendation_data,
+            project_data=project_data,
+            state=state,
+            set_status=set_status,
+            fetch_template=fetch_template,
+            rerender=rerender,
+        )
+        if holder.page:
+            holder.update()
+
+    section = _glass_card(
+        ft.Column(
+            spacing=12,
+            controls=[
+                _section_title(
+                    "Research Support Assistant",
+                    subtitle=(
+                        "Generate academic research support based on this project profile and recommendation."
+                    ),
+                ),
+                ft.Text(
+                    "AI-generated content is a draft. Review, edit, validate sources, and verify "
+                    "journal/indexing claims before submission.",
+                    size=12,
+                    color=_C_WARNING,
+                    italic=True,
+                ),
+                ft.Text(
+                    state["status_message"],
+                    size=12,
+                    color=state["status_color"],
+                    visible=False,
+                    ref=status_ref,
+                ),
+                ft.Container(ref=body_ref),
+            ],
+        )
+    )
+
+    rerender()
+    return section
+
+
+def _build_research_support_body(
+    *,
+    page: Optional[ft.Page],
+    result: DecisionReportData,
+    input_data: Optional[Mapping[str, Any]],
+    recommendation_id: Optional[int],
+    user_id: Optional[int],
+    recommendation_data: dict[str, Any],
+    project_data: dict[str, Any],
+    state: dict[str, Any],
+    set_status: Callable[[str, str], None],
+    fetch_template: Callable[[str], None],
+    rerender: Callable[[], None],
+) -> ft.Control:
+    controls: list[ft.Control] = []
+    saved_output = state.get("saved_output")
+
+    if saved_output and not state.get("show_form"):
+        controls.append(build_research_workspace(saved_output))
+        controls.append(
+            build_research_support_actions(
+                page=page,
+                saved_output=saved_output,
+                on_regenerate=lambda: _research_action_regenerate(
+                    state=state,
+                    fetch_template=fetch_template,
+                    set_status=set_status,
+                    rerender=rerender,
+                ),
+                on_delete=lambda: _research_action_delete(
+                    page=page,
+                    recommendation_id=recommendation_id,
+                    user_id=user_id,
+                    state=state,
+                    set_status=set_status,
+                    rerender=rerender,
+                ),
+                on_copy=lambda: _research_action_copy(
+                    page=page,
+                    saved_output=saved_output,
+                    set_status=set_status,
+                ),
+            )
+        )
+        return ft.Column(spacing=12, controls=controls)
+
+    controls.append(
+        build_research_support_form(
+            page,
+            result,
+            input_data,
+            saved_output=saved_output,
+            recommendation_id=recommendation_id,
+            user_id=user_id,
+            recommendation_data=recommendation_data,
+            project_data=project_data,
+            state=state,
+            set_status=set_status,
+            fetch_template=fetch_template,
+            rerender=rerender,
+        )
+    )
+    return ft.Column(spacing=12, controls=controls)
+
+
+def build_research_support_form(
+    page: Optional[ft.Page],
+    result: DecisionReportData,
+    input_data: Optional[Mapping[str, Any]],
+    saved_output: Optional[dict[str, Any]] = None,
+    *,
+    recommendation_id: Optional[int],
+    user_id: Optional[int],
+    recommendation_data: dict[str, Any],
+    project_data: dict[str, Any],
+    state: dict[str, Any],
+    set_status: Callable[[str, str], None],
+    fetch_template: Callable[[str], None],
+    rerender: Callable[[], None],
+) -> ft.Control:
+    _ = result, input_data
+    controls = state.get("field_controls")
+    if not isinstance(controls, dict):
+        controls = {}
+        state["field_controls"] = controls
+
+    selected_type = str(state.get("selected_type") or "")
+    template = state.get("template") if isinstance(state.get("template"), dict) else None
+    supported_types = state.get("supported_types") if isinstance(state.get("supported_types"), list) else []
+
+    prefills = {}
+    if isinstance(saved_output, dict) and isinstance(saved_output.get("research_inputs"), dict):
+        prefills = dict(saved_output.get("research_inputs") or {})
+
+    dropdown = build_research_type_dropdown(
+        supported_types,
+        selected_type,
+        on_change=lambda value: _on_research_type_change(
+            value,
+            state=state,
+            fetch_template=fetch_template,
+            set_status=set_status,
+            rerender=rerender,
+        ),
+    )
+
+    fields_content = build_dynamic_research_fields(
+        template,
+        field_controls=controls,
+        prefills=prefills,
+    )
+
+    note = ft.Text(
+        "Ollama is used first. If generation fails, you can choose template fallback explicitly.",
+        size=11,
+        color=_C_MUTED,
+        italic=True,
+    )
+
+    generate_btn = ft.ElevatedButton(
+        text="Generating with Ollama..." if state.get("is_generating") else "Generate Research Support",
+        icon=ft.icons.AUTO_AWESOME,
+        disabled=bool(state.get("is_generating") or recommendation_id is None),
+        style=ft.ButtonStyle(
+            bgcolor={ft.ControlState.DEFAULT: _C_CYAN},
+            color={ft.ControlState.DEFAULT: "#04101A"},
+            padding=ft.padding.symmetric(horizontal=16, vertical=12),
+            shape=ft.RoundedRectangleBorder(radius=12),
+        ),
+        on_click=lambda e: _on_generate_research_support(
+            page=e.page,
+            recommendation_id=recommendation_id,
+            user_id=user_id,
+            recommendation_data=recommendation_data,
+            project_data=project_data,
+            state=state,
+            set_status=set_status,
+            fetch_template=fetch_template,
+            rerender=rerender,
+        ),
+    )
+
+    fallback_btn = ft.OutlinedButton(
+        text="Use Template Fallback",
+        icon=ft.icons.FORMAT_COLOR_FILL_OUTLINED,
+        visible=bool(state.get("fallback_available")),
+        on_click=lambda e: _on_use_template_fallback(
+            page=e.page,
+            recommendation_id=recommendation_id,
+            user_id=user_id,
+            recommendation_data=recommendation_data,
+            project_data=project_data,
+            state=state,
+            set_status=set_status,
+            fetch_template=fetch_template,
+            rerender=rerender,
+        ),
+    )
+
+    error_note = ft.Text(
+        str(state.get("generation_error") or ""),
+        size=11,
+        color=_C_WARNING,
+        visible=bool(state.get("generation_error")),
+        selectable=True,
+    )
+
+    return _inner_card(
+        ft.Column(
+            spacing=12,
+            controls=[dropdown, fields_content, note, generate_btn, fallback_btn, error_note],
+        ),
+        padding=16,
+    )
+
+
+def build_research_type_dropdown(
+    research_types: list[str],
+    selected_type: str,
+    *,
+    on_change: Callable[[str], None],
+) -> ft.Control:
+    options = [ft.dropdown.Option(str(item)) for item in research_types]
+
+    def _handle_change(e: ft.ControlEvent) -> None:
+        on_change(str(e.control.value or ""))
+
+    return ft.Dropdown(
+        label="Research Paper Type",
+        value=selected_type or None,
+        options=options,
+        bgcolor=_C_FORM_BG,
+        border_color=_C_FORM_BD,
+        focused_border_color=_C_CYAN,
+        border_radius=12,
+        color=_C_PRIMARY,
+        label_style=ft.TextStyle(color=_C_SECONDARY, size=12),
+        helper_text="Select a research paper type to load required fields.",
+        helper_style=ft.TextStyle(color=_C_MUTED, size=11),
+        on_change=_handle_change,
+    )
+
+
+def build_dynamic_research_fields(
+    template: Optional[dict[str, Any]],
+    *,
+    field_controls: dict[str, ft.TextField],
+    prefills: Optional[dict[str, Any]] = None,
+) -> ft.Control:
+    prefills = prefills or {}
+    if not template:
+        field_controls.clear()
+        return ft.Container(
+            padding=ft.padding.symmetric(vertical=8),
+            content=ft.Text(
+                "Select a research type to view required and optional fields.",
+                size=12,
+                color=_C_MUTED,
+            ),
+        )
+
+    required_fields = template.get("required_fields") if isinstance(template.get("required_fields"), list) else []
+    optional_fields = template.get("optional_fields") if isinstance(template.get("optional_fields"), list) else []
+    all_fields = [str(x) for x in required_fields + optional_fields]
+
+    current = dict(field_controls)
+    field_controls.clear()
+
+    controls: list[ft.Control] = []
+    for key in all_fields:
+        label = _research_field_label(key)
+        required = key in required_fields
+        is_long = _is_long_research_field(key)
+
+        existing = current.get(key)
+        value = str(prefills.get(key, "") or "")
+        if existing is not None and not value:
+            value = str(existing.value or "")
+
+        text_field = ft.TextField(
+            label=f"{label}{' *' if required else ''}",
+            value=value,
+            multiline=is_long,
+            min_lines=3 if is_long else 1,
+            max_lines=6 if is_long else 1,
+            bgcolor=_C_FORM_BG,
+            border_color=_C_FORM_BD,
+            focused_border_color=_C_CYAN,
+            border_radius=12,
+            color=_C_PRIMARY,
+            label_style=ft.TextStyle(color=_C_SECONDARY, size=12),
+            text_size=13,
+            helper_text="Required" if required else "Optional",
+            helper_style=ft.TextStyle(color=_C_MUTED, size=10),
+        )
+        field_controls[key] = text_field
+        controls.append(
+            ft.Container(
+                col={"xs": 12, "md": 12 if is_long else 6},
+                content=text_field,
+            )
+        )
+
+    return ft.ResponsiveRow(spacing=10, run_spacing=10, controls=controls)
+
+
+def collect_research_inputs(field_controls: Mapping[str, ft.TextField]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for key, control in field_controls.items():
+        payload[str(key)] = str(control.value or "").strip()
+    return payload
+
+
+def validate_research_form(
+    research_type: str,
+    research_inputs: dict[str, Any],
+) -> dict[str, Any]:
+    if not str(research_type or "").strip():
+        return {"success": False, "error": "Please select a research paper type.", "missing_fields": []}
+
+    result = rs_validate_research_inputs(research_type, research_inputs)
+    if not result.get("success"):
+        missing = result.get("missing_fields") or []
+        names = ", ".join(_research_field_label(str(name)) for name in missing)
+        msg = result.get("error") or f"Please complete the required research fields: {names}"
+        return {
+            "success": False,
+            "error": msg,
+            "missing_fields": missing,
+        }
+    return {"success": True, "missing_fields": []}
+
+
+def build_research_workspace(saved_output: dict[str, Any]) -> ft.Control:
+    saved = _normalize_saved_output(saved_output)
+    research_type = str(saved.get("research_type") or "—")
+    improved_title = str(saved.get("improved_research_title") or saved.get("research_title") or "Untitled Research Draft")
+    original_title = str(saved.get("original_research_title") or saved.get("research_title") or "").strip()
+    generated_by = str(saved.get("generated_by_model") or "—")
+    generated_at = _format_datetime_label(saved.get("updated_at") or saved.get("created_at"))
+    readiness_note = (
+        "This AI-generated research draft is intended for academic preparation only. Users must revise the content, add verified related literature, validate methodology, and follow institutional formatting requirements before submission."
+    )
+
+    note_bar = ft.Container(
+        padding=ft.padding.symmetric(horizontal=12, vertical=10),
+        bgcolor=ft.colors.with_opacity(0.10, _C_WARNING),
+        border=ft.border.all(1, ft.colors.with_opacity(0.35, _C_WARNING)),
+        border_radius=12,
+        content=ft.Text(readiness_note, size=11, color=_C_WARNING, selectable=True),
+    )
+
+    header = ft.Row(
+        wrap=True,
+        spacing=10,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        controls=[
+            ft.Text("Research Paper Workspace", size=16, weight=ft.FontWeight.W_600, color=_C_PRIMARY),
+            ft.Container(
+                padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                bgcolor=ft.colors.with_opacity(0.10, _C_CYAN),
+                border=ft.border.all(1, ft.colors.with_opacity(0.35, _C_CYAN)),
+                border_radius=Radii.pill,
+                content=ft.Text(research_type, size=10, color=_C_CYAN, weight=ft.FontWeight.W_700),
+            ),
+            ft.Container(
+                padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                bgcolor=ft.colors.with_opacity(0.10, _C_MUTED),
+                border=ft.border.all(1, ft.colors.with_opacity(0.30, _C_MUTED)),
+                border_radius=Radii.pill,
+                content=ft.Text(f"Generated: {generated_at}", size=10, color=_C_SECONDARY),
+            ),
+        ],
+    )
+
+    meta = ft.Column(
+        spacing=4,
+        controls=[
+            ft.Text(improved_title, size=15, weight=ft.FontWeight.W_600, color=_C_PRIMARY, selectable=True),
+            ft.Text(f"Original title: {original_title or '—'}", size=11, color=_C_MUTED, selectable=True),
+            ft.Text(f"Generated by model: {generated_by}", size=11, color=_C_MUTED),
+            ft.Text(
+                "Academic safety: AI-generated content is a draft and requires human review, editing, validation, and verified sources.",
+                size=11,
+                color=_C_WARNING,
+                italic=True,
+            ),
+        ],
+    )
+
+    return _inner_card(
+        ft.Column(
+            spacing=12,
+            controls=[
+                note_bar,
+                header,
+                meta,
+                build_research_draft_container(saved),
+                build_suggested_journals_section(saved),
+                build_search_queries_section(saved),
+                build_open_access_links_section(saved),
+                build_publication_recommendation_section(saved),
+                build_scopus_note_card(saved),
+                ft.Container(
+                    padding=ft.padding.symmetric(horizontal=12, vertical=10),
+                    bgcolor=ft.colors.with_opacity(0.10, _C_WARNING),
+                    border=ft.border.all(1, ft.colors.with_opacity(0.35, _C_WARNING)),
+                    border_radius=12,
+                    content=ft.Text(readiness_note, size=11, color=_C_WARNING, selectable=True),
+                ),
+            ],
+        ),
+        padding=16,
+    )
+
+
+def build_research_draft_container(saved_output: dict[str, Any]) -> ft.Control:
+    saved = _normalize_saved_output(saved_output)
+    draft = _as_json_object(saved.get("research_draft"))
+    research_type = str(saved.get("research_type") or "")
+    order = _research_section_order(research_type, draft)
+
+    sections: list[ft.Control] = []
+    for idx, key in enumerate(order):
+        text = format_research_section_content(draft.get(key))
+        if not text:
+            continue
+        sections.append(
+            ft.Column(
+                spacing=6,
+                controls=[
+                    ft.Text(
+                        _humanize_section_key(key).upper(),
+                        size=12,
+                        weight=ft.FontWeight.W_700,
+                        color=_C_CYAN,
+                    ),
+                    ft.Text(text, size=12, color=_C_SECONDARY, selectable=True),
+                    ft.Divider(color=ft.colors.with_opacity(0.20, _C_INNER_BD), height=1),
+                ],
+            )
+        )
+        if idx >= 30:
+            break
+
+    if not sections:
+        sections = [
+            ft.Text(
+                "No research draft sections are available yet.",
+                size=12,
+                color=_C_MUTED,
+            )
+        ]
+
+    return _inner_card(
+        ft.Column(
+            spacing=10,
+            controls=[
+                ft.Text("Research Draft", size=14, weight=ft.FontWeight.W_600, color=_C_PRIMARY),
+                *sections,
+            ],
+        ),
+        padding=14,
+    )
+
+
+def build_suggested_journals_section(saved_output: dict[str, Any]) -> ft.Control:
+    saved = _normalize_saved_output(saved_output)
+    journals = _as_json_list(saved.get("suggested_journals"))
+    cards: list[ft.Control] = []
+    for item in journals:
+        if not isinstance(item, dict):
+            continue
+        cards.append(
+            _inner_card(
+                ft.Column(
+                    spacing=4,
+                    controls=[
+                        ft.Text(str(item.get("venue_name") or "—"), size=13, weight=ft.FontWeight.W_600, color=_C_PRIMARY),
+                        ft.Text(f"Type: {item.get('venue_type') or '—'}", size=11, color=_C_SECONDARY),
+                        ft.Text(f"Field: {item.get('field_relevance') or '—'}", size=11, color=_C_SECONDARY),
+                        ft.Text(f"Why suggested: {item.get('why_suggested') or '—'}", size=11, color=_C_SECONDARY, selectable=True),
+                        ft.Text(f"Verification note: {item.get('verification_note') or '—'}", size=11, color=_C_WARNING, selectable=True),
+                    ],
+                ),
+                padding=12,
+            )
+        )
+    if not cards:
+        cards = [ft.Text("No suggested venues available.", size=12, color=_C_MUTED)]
+
+    return ft.Column(
+        spacing=8,
+        controls=[
+            ft.Text("Suggested Journals / Publication Venues", size=13, weight=ft.FontWeight.W_600, color=_C_PRIMARY),
+            ft.Column(spacing=8, controls=cards),
+        ],
+    )
+
+
+def build_search_queries_section(saved_output: dict[str, Any]) -> ft.Control:
+    saved = _normalize_saved_output(saved_output)
+    queries = _as_json_list(saved.get("search_queries"))
+    items: list[ft.Control] = []
+    for item in queries:
+        if not isinstance(item, dict):
+            continue
+        q = str(item.get("query") or "").strip()
+        p = str(item.get("purpose") or "").strip()
+        if not q:
+            continue
+        items.append(
+            _inner_card(
+                ft.Column(
+                    spacing=4,
+                    controls=[
+                        ft.Text(q, size=12, weight=ft.FontWeight.W_600, color=_C_PRIMARY, selectable=True),
+                        ft.Text(p or "No purpose note.", size=11, color=_C_SECONDARY, selectable=True),
+                    ],
+                ),
+                padding=10,
+            )
+        )
+    if not items:
+        items = [ft.Text("No search queries available.", size=12, color=_C_MUTED)]
+
+    return ft.Column(
+        spacing=8,
+        controls=[
+            ft.Text("Suggested Search Queries", size=13, weight=ft.FontWeight.W_600, color=_C_PRIMARY),
+            ft.Column(spacing=8, controls=items),
+        ],
+    )
+
+
+def build_open_access_links_section(saved_output: dict[str, Any]) -> ft.Control:
+    saved = _normalize_saved_output(saved_output)
+    links = _as_json_list(saved.get("open_access_links"))
+    rows: list[ft.Control] = []
+    for item in links:
+        if not isinstance(item, dict):
+            continue
+        source = str(item.get("source_name") or "Open Source")
+        url = str(item.get("search_url") or "").strip()
+        purpose = str(item.get("purpose") or "").strip()
+        if not url:
+            continue
+        button = ft.TextButton(
+            text=source,
+            icon=ft.icons.OPEN_IN_NEW,
+            on_click=(lambda e, u=url: e.page.launch_url(u) if e.page else None),
+        )
+        rows.append(
+            _inner_card(
+                ft.Column(
+                    spacing=4,
+                    controls=[
+                        button,
+                        ft.Text(url, size=11, color=_C_MUTED, selectable=True),
+                        ft.Text(purpose or "Open access search link.", size=11, color=_C_SECONDARY),
+                    ],
+                ),
+                padding=10,
+            )
+        )
+
+    if not rows:
+        rows = [ft.Text("No open access links available.", size=12, color=_C_MUTED)]
+
+    return ft.Column(
+        spacing=8,
+        controls=[
+            ft.Text("Open Access Paper Search Links", size=13, weight=ft.FontWeight.W_600, color=_C_PRIMARY),
+            ft.Column(spacing=8, controls=rows),
+        ],
+    )
+
+
+def build_publication_recommendation_section(saved_output: dict[str, Any]) -> ft.Control:
+    saved = _normalize_saved_output(saved_output)
+    publication = _as_json_object(saved.get("publication_recommendation"))
+    level = str(publication.get("recommended_level") or "—")
+    reason = str(publication.get("reason") or "No reason provided.")
+    improvements = str(publication.get("improvement_needed") or "No improvement note provided.")
+
+    return _inner_card(
+        ft.Column(
+            spacing=6,
+            controls=[
+                ft.Text("Publication Recommendation", size=13, weight=ft.FontWeight.W_600, color=_C_PRIMARY),
+                ft.Text(f"Recommended level: {level}", size=12, color=_C_CYAN, weight=ft.FontWeight.W_600),
+                ft.Text(f"Reason: {reason}", size=11, color=_C_SECONDARY, selectable=True),
+                ft.Text(f"Improvement needed: {improvements}", size=11, color=_C_SECONDARY, selectable=True),
+            ],
+        ),
+        padding=12,
+    )
+
+
+def build_scopus_note_card(saved_output: dict[str, Any]) -> ft.Control:
+    saved = _normalize_saved_output(saved_output)
+    note = str(saved.get("scopus_verification_note") or "").strip()
+    if not note:
+        note = (
+            "Scopus indexing must be manually verified through official Scopus sources or "
+            "the journal/conference website. StackWise AI does not automatically claim that "
+            "any venue is Scopus-indexed."
+        )
+
+    return ft.Container(
+        padding=12,
+        bgcolor=ft.colors.with_opacity(0.12, _C_WARNING),
+        border=ft.border.all(1, ft.colors.with_opacity(0.35, _C_WARNING)),
+        border_radius=12,
+        content=ft.Text(note, size=11, color=_C_WARNING, selectable=True),
+    )
+
+
+def build_research_support_actions(
+    *,
+    page: Optional[ft.Page],
+    saved_output: dict[str, Any],
+    on_regenerate: Callable[[], None],
+    on_delete: Callable[[], None],
+    on_copy: Callable[[], None],
+) -> ft.Control:
+    _ = page, saved_output
+    return ft.Row(
+        wrap=True,
+        spacing=8,
+        controls=[
+            ft.OutlinedButton(
+                text="Regenerate Research Support",
+                icon=ft.icons.REFRESH,
+                on_click=lambda _e: on_regenerate(),
+            ),
+            ft.OutlinedButton(
+                text="Delete Research Output",
+                icon=ft.icons.DELETE_OUTLINE,
+                style=ft.ButtonStyle(color={ft.ControlState.DEFAULT: _C_WARNING}),
+                on_click=lambda _e: on_delete(),
+            ),
+            ft.OutlinedButton(
+                text="Copy Research Draft",
+                icon=ft.icons.CONTENT_COPY_OUTLINED,
+                on_click=lambda _e: on_copy(),
+            ),
+        ],
+    )
+
+
+def format_research_draft_copy_text(saved_output: dict[str, Any]) -> str:
+    saved = _normalize_saved_output(saved_output)
+    lines: list[str] = []
+    display_title = str(saved.get("improved_research_title") or saved.get("research_title") or "—")
+    lines.append(f"Research Type: {saved.get('research_type') or '—'}")
+    lines.append(f"Research Title: {display_title}")
+    lines.append("")
+
+    draft = _as_json_object(saved.get("research_draft"))
+    for key in _research_section_order(str(saved.get("research_type") or ""), draft):
+        text = format_research_section_content(draft.get(key))
+        if not text:
+            continue
+        lines.append(_humanize_section_key(key).upper())
+        lines.append(text)
+        lines.append("")
+
+    return "\n".join(lines).strip()
+
+
+def _on_research_type_change(
+    value: str,
+    *,
+    state: dict[str, Any],
+    fetch_template: Callable[[str], None],
+    set_status: Callable[[str, str], None],
+    rerender: Callable[[], None],
+) -> None:
+    state["selected_type"] = str(value or "").strip()
+    fetch_template(state["selected_type"])
+    set_status("")
+    rerender()
+
+
+def _on_generate_research_support(
+    *,
+    page: Optional[ft.Page],
+    recommendation_id: Optional[int],
+    user_id: Optional[int],
+    recommendation_data: dict[str, Any],
+    project_data: dict[str, Any],
+    state: dict[str, Any],
+    set_status: Callable[[str, str], None],
+    fetch_template: Callable[[str], None],
+    rerender: Callable[[], None],
+) -> None:
+    selected_type = str(state.get("selected_type") or "").strip()
+    field_controls = state.get("field_controls") if isinstance(state.get("field_controls"), dict) else {}
+    research_inputs = collect_research_inputs(field_controls)
+
+    if not selected_type:
+        set_status("Please select a research paper type.", _C_WARNING)
+        return
+
+    validation = validate_research_form(selected_type, research_inputs)
+    if not validation.get("success"):
+        set_status(str(validation.get("error") or "Please complete the required fields."), _C_WARNING)
+        return
+
+    if recommendation_id is None:
+        set_status(
+            "Cannot generate research support because the recommendation record ID is missing.",
+            _C_WARNING,
+        )
+        return
+
+    state["is_generating"] = True
+    rerender()
+
+    try:
+        if page is not None:
+            show_toast(page, "Generating with Ollama...", kind="info")
+        state["fallback_available"] = False
+        state["generation_error"] = ""
+        generated = rs_generate_ai_research_support_for_recommendation(
+            recommendation_id,
+            user_id,
+            recommendation_data,
+            project_data,
+            selected_type,
+            research_inputs,
+        )
+        if not generated.get("success"):
+            message = str(generated.get("error") or "Unable to generate research support.")
+            state["fallback_available"] = bool(generated.get("fallback_available"))
+            state["generation_error"] = message
+            state["show_form"] = True
+            set_status(message, _C_WARNING)
+            if page is not None:
+                show_toast(page, message, kind="warning")
+            rerender()
+            return
+
+        refreshed = rs_get_saved_research_support(recommendation_id, user_id)
+        saved_payload = refreshed.get("data") if refreshed.get("success") else generated.get("data")
+        state["saved_output"] = _normalize_saved_output(saved_payload)
+        state["show_form"] = False
+        state["fallback_available"] = False
+        state["generation_error"] = ""
+        fetch_template(selected_type)
+        set_status("Research support generated and saved.", _C_SUCCESS)
+        if page is not None:
+            show_toast(page, "Research support generated and saved.", kind="success")
+    finally:
+        state["is_generating"] = False
+        rerender()
+
+
+def _on_use_template_fallback(
+    *,
+    page: Optional[ft.Page],
+    recommendation_id: Optional[int],
+    user_id: Optional[int],
+    recommendation_data: dict[str, Any],
+    project_data: dict[str, Any],
+    state: dict[str, Any],
+    set_status: Callable[[str, str], None],
+    fetch_template: Callable[[str], None],
+    rerender: Callable[[], None],
+) -> None:
+    selected_type = str(state.get("selected_type") or "").strip()
+    field_controls = state.get("field_controls") if isinstance(state.get("field_controls"), dict) else {}
+    research_inputs = collect_research_inputs(field_controls)
+
+    if not selected_type:
+        set_status("Please select a research paper type.", _C_WARNING)
+        return
+
+    validation = validate_research_form(selected_type, research_inputs)
+    if not validation.get("success"):
+        set_status(str(validation.get("error") or "Please complete the required fields."), _C_WARNING)
+        return
+
+    if recommendation_id is None:
+        set_status(
+            "Cannot generate research support because the recommendation record ID is missing.",
+            _C_WARNING,
+        )
+        return
+
+    state["is_generating"] = True
+    rerender()
+
+    try:
+        generated = rs_generate_template_research_support_for_recommendation(
+            recommendation_id,
+            user_id,
+            recommendation_data,
+            project_data,
+            selected_type,
+            research_inputs,
+        )
+        if not generated.get("success"):
+            set_status(str(generated.get("error") or "Unable to generate template fallback."), _C_WARNING)
+            if page is not None:
+                show_toast(page, str(generated.get("error") or "Unable to generate template fallback."), kind="warning")
+            return
+
+        refreshed = rs_get_saved_research_support(recommendation_id, user_id)
+        saved_payload = refreshed.get("data") if refreshed.get("success") else generated.get("data")
+        state["saved_output"] = _normalize_saved_output(saved_payload)
+        state["show_form"] = False
+        state["fallback_available"] = False
+        state["generation_error"] = ""
+        fetch_template(selected_type)
+        set_status("Template fallback generated and saved.", _C_WARNING)
+        if page is not None:
+            show_toast(page, "Template fallback generated and saved.", kind="warning")
+    finally:
+        state["is_generating"] = False
+        rerender()
+
+
+def _research_action_regenerate(
+    *,
+    state: dict[str, Any],
+    fetch_template: Callable[[str], None],
+    set_status: Callable[[str, str], None],
+    rerender: Callable[[], None],
+) -> None:
+    saved = state.get("saved_output")
+    if isinstance(saved, dict):
+        saved_type = str(saved.get("research_type") or "").strip()
+        if saved_type:
+            state["selected_type"] = saved_type
+            fetch_template(saved_type)
+    state["show_form"] = True
+    set_status("Fill fields and generate again to update this research output.", _C_SECONDARY)
+    rerender()
+
+
+def _research_action_delete(
+    *,
+    page: Optional[ft.Page],
+    recommendation_id: Optional[int],
+    user_id: Optional[int],
+    state: dict[str, Any],
+    set_status: Callable[[str, str], None],
+    rerender: Callable[[], None],
+) -> None:
+    if recommendation_id is None:
+        set_status("Cannot delete research output because recommendation ID is missing.", _C_WARNING)
+        return
+
+    def confirm_delete(_e: ft.ControlEvent) -> None:
+        if page is None:
+            return
+        page.close(dialog)
+        deleted = rs_delete_saved_research_support(recommendation_id, user_id)
+        if not deleted.get("success"):
+            set_status(str(deleted.get("error") or "Unable to delete research output."), _C_WARNING)
+            return
+        state["saved_output"] = None
+        state["show_form"] = True
+        set_status("Research output deleted.", _C_SUCCESS)
+        show_toast(page, "Research output deleted.", kind="success")
+        rerender()
+
+    def cancel_delete(_e: ft.ControlEvent) -> None:
+        if page is None:
+            return
+        page.close(dialog)
+
+    if page is None:
+        deleted = rs_delete_saved_research_support(recommendation_id, user_id)
+        if deleted.get("success"):
+            state["saved_output"] = None
+            state["show_form"] = True
+            set_status("Research output deleted.", _C_SUCCESS)
+            rerender()
+        else:
+            set_status(str(deleted.get("error") or "Unable to delete research output."), _C_WARNING)
+        return
+
+    dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Delete Research Output"),
+        content=ft.Text("Delete saved research output for this recommendation?"),
+        actions=[
+            ft.TextButton("Cancel", on_click=cancel_delete),
+            ft.TextButton("Delete", on_click=confirm_delete),
+        ],
+        actions_alignment=ft.MainAxisAlignment.END,
+    )
+    page.open(dialog)
+
+
+def _research_action_copy(
+    *,
+    page: Optional[ft.Page],
+    saved_output: dict[str, Any],
+    set_status: Callable[[str, str], None],
+) -> None:
+    if page is None:
+        set_status("Research draft copied.", _C_SUCCESS)
+        return
+    try:
+        page.set_clipboard(format_research_draft_copy_text(saved_output))
+        set_status("Research draft copied.", _C_SUCCESS)
+        show_toast(page, "Research draft copied.", kind="success")
+    except Exception:
+        set_status("Unable to copy research draft.", _C_WARNING)
+
+
+def _normalize_saved_output(saved_output: Any) -> dict[str, Any]:
+    if isinstance(saved_output, dict):
+        return dict(saved_output)
+    if isinstance(saved_output, str):
+        try:
+            parsed = json.loads(saved_output)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return {}
+    return {}
+
+
+def resolve_recommendation_id(
+    result: Optional[Any] = None,
+    input_data: Optional[Mapping[str, Any]] = None,
+    route_params: Optional[Mapping[str, Any]] = None,
+) -> Optional[int]:
+    sources: list[Any] = []
+    if isinstance(route_params, Mapping):
+        sources.extend([
+            route_params.get("id"),
+            route_params.get("recommendation_id"),
+            route_params.get("record_id"),
+        ])
+
+    if isinstance(result, Mapping):
+        sources.extend([
+            result.get("id"),
+            result.get("recommendation_id"),
+            result.get("record_id"),
+        ])
+        saved = result.get("saved_recommendation")
+        if isinstance(saved, Mapping):
+            sources.extend([
+                saved.get("id"),
+                saved.get("recommendation_id"),
+                saved.get("record_id"),
+            ])
+
+    if isinstance(input_data, Mapping):
+        sources.extend([
+            input_data.get("id"),
+            input_data.get("recommendation_id"),
+            input_data.get("record_id"),
+        ])
+
+    for value in sources:
+        if value is None:
+            continue
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed > 0:
+            return parsed
+    return None
+
+
+def _as_json_object(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return {}
+    return {}
+
+
+def _as_json_list(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return parsed
+        except Exception:
+            return []
+    return []
+
+
+def format_research_section_content(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        lines: list[str] = []
+        for index, item in enumerate(value, start=1):
+            item_text = format_research_section_content(item)
+            if item_text:
+                lines.append(f"{index}. {item_text}")
+        return "\n".join(lines).strip()
+    if isinstance(value, dict):
+        lines: list[str] = []
+        for key, item in value.items():
+            label = _humanize_section_key(str(key))
+            item_text = format_research_section_content(item)
+            if not item_text:
+                continue
+            if "\n" in item_text:
+                indented = "\n".join(f"  {line}" for line in item_text.splitlines())
+                lines.append(f"{label}:\n{indented}")
+            else:
+                lines.append(f"{label}: {item_text}")
+        return "\n".join(lines).strip()
+    return str(value).strip()
+
+
+def _format_datetime_label(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "—"
+    try:
+        normalized = text.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(normalized)
+        return dt.strftime("%b %d, %Y")
+    except Exception:
+        return text
+
+
+def _humanize_section_key(key: str) -> str:
+    return str(key or "").replace("_", " ").strip().title()
+
+
+def _research_field_label(field_name: str) -> str:
+    custom = {
+        "research_title": "Research Title",
+        "research_locale": "Research Locale / Organization",
+        "target_users": "Target Users / Respondents",
+        "academic_level": "Academic Level",
+        "adviser_or_instructor": "Adviser / Instructor",
+        "institution_name": "Institution Name",
+        "additional_notes": "Additional Notes",
+    }
+    if field_name in custom:
+        return custom[field_name]
+    return _humanize_section_key(field_name)
+
+
+def _is_long_research_field(field_name: str) -> bool:
+    long_keys = {
+        "problem_background",
+        "expected_output",
+        "main_beneficiaries",
+        "existing_system_or_current_process",
+        "problems_encountered",
+        "proposed_system_benefits",
+        "stakeholders",
+        "functional_requirements",
+        "non_functional_requirements",
+        "available_resources",
+        "estimated_budget_or_constraints",
+        "dataset_source",
+        "target_variable_or_output",
+        "evaluation_metrics",
+        "ethical_or_privacy_concerns",
+        "technologies_to_compare",
+        "evaluation_criteria",
+        "reason_for_comparison",
+        "problem_context",
+        "participants_or_users",
+        "intervention_plan",
+        "evaluation_method",
+        "additional_notes",
+    }
+    return field_name in long_keys
+
+
+def _research_section_order(research_type: str, draft: dict[str, Any]) -> list[str]:
+    details = rs_get_research_type_details(research_type)
+    if details.get("success") and isinstance(details.get("data"), dict):
+        output_sections = details["data"].get("output_sections")
+        if isinstance(output_sections, list):
+            ordered = [str(x) for x in output_sections if str(x) in draft]
+            extras = [k for k in draft.keys() if k not in ordered]
+            return ordered + extras
+    return list(draft.keys())
+
+
+def _resolve_recommendation_record_id(
+    result: DecisionReportData,
+    input_data: Optional[Mapping[str, Any]],
+) -> Optional[int]:
+    candidates: list[Any] = [
+        result.record_id,
+    ]
+    if isinstance(input_data, Mapping):
+        candidates.extend(
+            [
+                input_data.get("id"),
+                input_data.get("recommendation_id"),
+            ]
+        )
+
+    for val in candidates:
+        if val is None:
+            continue
+        try:
+            num = int(val)
+            if num > 0:
+                return num
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _build_project_data_for_research(
+    result: DecisionReportData,
+    input_data: Optional[Mapping[str, Any]],
+) -> dict[str, Any]:
+    ctx = dict(result.reason_context or {})
+    src = dict(input_data or {})
+
+    def pick(*keys: str, default: Any = "") -> Any:
+        for key in keys:
+            if key in src and src.get(key) not in (None, ""):
+                return src.get(key)
+            if key in ctx and ctx.get(key) not in (None, ""):
+                return ctx.get(key)
+        return default
+
+    selected_features = pick("selected_features", default=[])
+    if isinstance(selected_features, str):
+        selected_features = [x.strip() for x in selected_features.split(",") if x.strip()]
+    if not isinstance(selected_features, list):
+        selected_features = []
+
+    return {
+        "project_name": pick("project_name", default=result.project_name),
+        "project_type": pick("project_type", default=result.project_type),
+        "selected_features": selected_features,
+        "project_goal": pick("project_goal", default=""),
+        "team_size": pick("team_size", default=""),
+        "complexity": pick("complexity", default=result.complexity),
+        "timeline": pick("timeline", default=""),
+        "requirements_stability": pick("requirements_stability", default=""),
+        "stakeholder_involvement": pick("stakeholder_involvement", default=""),
+        "preferred_platform": pick("preferred_platform", "platform", default=""),
+        "development_experience": pick("development_experience", "experience", default=""),
+        "scalability_needs": pick("scalability_needs", "scalability", default=""),
+        "performance_requirements": pick("performance_requirements", default=""),
+        "security_requirements": pick("security_requirements", "security", default=""),
+        "budget_constraints": pick("budget_constraints", default=""),
+        "maintenance_expectations": pick("maintenance_expectations", default=""),
+        "deployment_preference": pick("deployment_preference", default=""),
+    }
+
+
+def _build_recommendation_data_for_research(result: DecisionReportData) -> dict[str, Any]:
+    return {
+        "recommended_language": result.recommended_language,
+        "recommended_framework": result.recommended_framework,
+        "recommended_sdlc": result.recommended_sdlc,
+        "confidence_score": result.confidence_score,
+        "confidence_label": result.confidence_label,
+        "explanation": result.explanation_summary,
+        "language_reason": result.language_reason,
+        "framework_reason": result.framework_reason,
+        "sdlc_reason": result.sdlc_reason,
+        "alternative_technology_stacks": result.alternative_stacks,
+        "risk_analysis": result.risk_analysis,
+        "skill_gap_analysis": result.skill_gap_analysis,
+        "suggested_project_roadmap": result.roadmap_phases,
+    }
+
+
 def build_feedback_and_report_actions_section(
     theme: Mapping[str, Any],
     *,
@@ -3451,6 +4762,18 @@ def _stack_learning_fallbacks(
                 ("Local storage and security", "Plan secure local data handling and permissions."),
                 ("Desktop packaging", "Prepare installers and platform-specific build steps."),
                 ("Performance testing", "Validate startup time, memory use, and UI responsiveness."),
+            ],
+        ),
+        (
+            "flet",
+            ("flet",),
+            [
+                ("Python fundamentals", f"Review {lang} basics for UI and service integration."),
+                ("Flet controls and layout system", "Practice Row, Column, Container, Card, and ListView."),
+                ("Event handling in Flet", "Learn click handlers, forms, and state updates."),
+                ("Routing/navigation in Flet", "Plan page flow and navigation patterns."),
+                ("Database and API integration", "Connect Python services, databases, and optional Ollama/AI APIs."),
+                ("Packaging/deployment basics", "Review flet build and target-platform packaging."),
             ],
         ),
         (
